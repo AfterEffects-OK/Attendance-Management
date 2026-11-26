@@ -1,4 +1,181 @@
-function renderCards(employees) {
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>社員証QRコード一覧</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+  <style>
+    :root {
+      --bg: #0f172a;
+      --surface: #1e293b;
+      --card-bg: #ffffff;
+      --card-text: #0f172a;
+      --text: #f8fafc;
+      --muted: #94a3b8;
+      --accent: #38bdf8;
+      --danger: #f87171;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background-color: var(--bg);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Hiragino Kaku Gothic ProN", sans-serif;
+      padding: 16px;
+    }
+    .toolbar {
+      max-width: 1080px;
+      margin: 0 auto 16px;
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: space-between;
+      align-items: center;
+      gap: 10px;
+      background: var(--surface);
+      padding: 12px 16px;
+      border-radius: 10px;
+      border: 1px solid #334155;
+    }
+    .toolbar-left {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+    .btn {
+      background: #334155;
+      color: var(--text);
+      border: 1px solid #475569;
+      padding: 8px 14px;
+      border-radius: 6px;
+      font-size: 0.9rem;
+      font-weight: 600;
+      text-decoration: none;
+      cursor: pointer;
+    }
+    .btn-primary {
+      background: var(--accent);
+      color: #0f172a;
+      border-color: var(--accent);
+    }
+    .status-box {
+      max-width: 1080px;
+      margin: 0 auto 16px;
+      padding: 12px 16px;
+      border-radius: 8px;
+      background: var(--surface);
+      border: 1px solid #334155;
+      font-size: 0.9rem;
+      line-height: 1.5;
+      word-break: break-word;
+    }
+    .status-box.error {
+      background: rgba(127, 29, 29, 0.45);
+      border-color: var(--danger);
+      color: #fecaca;
+    }
+    .cards-grid {
+      max-width: 1080px;
+      margin: 0 auto;
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+      gap: 16px;
+    }
+    .id-card {
+      background: var(--card-bg);
+      color: var(--card-text);
+      border-radius: 12px;
+      padding: 16px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      text-align: center;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
+      break-inside: avoid;
+    }
+    .emp-id {
+      font-size: 0.85rem;
+      font-weight: 700;
+      color: #475569;
+      letter-spacing: 0.08em;
+      margin-bottom: 4px;
+    }
+    .emp-name {
+      font-size: 1.25rem;
+      font-weight: 800;
+      margin-bottom: 2px;
+    }
+    .emp-dept {
+      font-size: 0.85rem;
+      color: #334155;
+      margin-bottom: 12px;
+    }
+    .qr-box {
+      width: 148px;
+      height: 148px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin-bottom: 8px;
+    }
+    .emp-sub {
+      font-size: 0.75rem;
+      color: #64748b;
+    }
+    @media print {
+      body {
+        background: #ffffff;
+        color: #000000;
+        padding: 0;
+      }
+      .toolbar, .status-box {
+        display: none !important;
+      }
+      .cards-grid {
+        max-width: 100%;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 12px;
+      }
+      .id-card {
+        border: 1px solid #cbd5e1;
+        box-shadow: none;
+      }
+    }
+  </style>
+</head>
+<body>
+
+  <div class="toolbar">
+    <div class="toolbar-left">
+      <a href="./index.html" class="btn">打刻画面へ戻る</a>
+      <button class="btn" onclick="loadEmployees()">再読み込み</button>
+    </div>
+    <div>
+      <button class="btn btn-primary" onclick="window.print()">印刷する</button>
+    </div>
+  </div>
+
+  <div id="status-box" class="status-box">従業員データを読み込んでいます...</div>
+
+  <div id="cards-grid" class="cards-grid"></div>
+
+  <script>
+    const GAS_WEBAPP_URL = 'https://script.google.com/macros/s/AKfycbxXYd9al_H105tYO7RMG78hMoN27SQbEOaGy6vdst5IAUS0dhsHlx-3YdVPlMUIwGFy/exec';
+
+    function setStatus(message, isError = false) {
+      const box = document.getElementById('status-box');
+      box.textContent = message;
+      box.className = isError ? 'status-box error' : 'status-box';
+    }
+
+    function normalizeEmployeeList(res) {
+      if (Array.isArray(res)) return res;
+      if (res && Array.isArray(res.employees)) return res.employees;
+      if (res && Array.isArray(res.data)) return res.data;
+      return null;
+    }
+
+    function renderCards(employees) {
       const grid = document.getElementById('cards-grid');
       grid.innerHTML = '';
 
@@ -64,3 +241,49 @@ function renderCards(employees) {
 
       setStatus(`${employees.length}名分の社員証QRコードを表示しました。`);
     }
+
+    async function loadEmployees() {
+      setStatus('従業員データを読み込んでいます...');
+      document.getElementById('cards-grid').innerHTML = '';
+
+      try {
+        const response = await fetch(GAS_WEBAPP_URL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+          body: JSON.stringify({
+            action: 'getEmployeesForQrCards',
+            onlyActive: false
+          })
+        });
+
+        if (!response.ok) {
+          throw new Error(`HTTPステータス ${response.status} が返されました。`);
+        }
+
+        const rawText = await response.text();
+        let res;
+        try {
+          res = JSON.parse(rawText);
+        } catch (e) {
+          throw new Error(`JSON解析失敗: ${rawText.slice(0, 180)}`);
+        }
+
+        if (res && res.success === false) {
+          throw new Error(res.message || 'GAS側でエラーが返されました。');
+        }
+
+        const list = normalizeEmployeeList(res);
+        if (!list) {
+          throw new Error(`想定外のレスポンス形式です: ${rawText.slice(0, 180)}`);
+        }
+
+        renderCards(list);
+      } catch (err) {
+        setStatus(`読み込みエラー: ${err.message}`, true);
+      }
+    }
+
+    window.addEventListener('load', loadEmployees);
+  </script>
+</body>
+</html>
