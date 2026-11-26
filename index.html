@@ -451,7 +451,7 @@
       } catch (e) {}
 
       facingMode = (facingMode === 'environment') ? 'user' : 'environment';
-      await new Promise(resolve => setTimeout(resolve, 600));
+      await new Promise(resolve => setTimeout(resolve, 200));
       await startScanner();
       isSwitchingCamera = false;
     }
