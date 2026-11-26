@@ -1,0 +1,606 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+  <title>QR勤怠状況確認</title>
+  <script id="qr-lib-primary" src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js" onerror="tryNextQrCdn()"></script>
+  <style>
+    :root {
+      --bg: #0f172a;
+      --surface: #1e293b;
+      --surface-2: #0b1120;
+      --text: #f8fafc;
+      --muted: #94a3b8;
+      --accent: #38bdf8;
+      --ok: #22c55e;
+      --warn: #f59e0b;
+      --danger: #f87171;
+      --border: #334155;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background-color: var(--bg);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Hiragino Kaku Gothic ProN", sans-serif;
+      min-height: 100vh;
+      padding: 12px;
+    }
+    .container {
+      max-width: 680px;
+      margin: 0 auto;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+    header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding-bottom: 10px;
+      border-bottom: 1px solid var(--border);
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+    .title-group h1 {
+      font-size: 1.15rem;
+      font-weight: 700;
+    }
+    .title-group p {
+      font-size: 0.8rem;
+      color: var(--muted);
+    }
+    .header-actions {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+    .btn-sm {
+      background: var(--surface);
+      color: var(--text);
+      border: 1px solid #475569;
+      padding: 6px 10px;
+      border-radius: 6px;
+      font-size: 0.8rem;
+      text-decoration: none;
+      cursor: pointer;
+    }
+    .btn-sm.active-cam {
+      border-color: var(--accent);
+      color: var(--accent);
+    }
+    @media (max-width: 640px) {
+      .btn-qr-cards {
+        display: none;
+      }
+    }
+    #reader-wrapper {
+      width: 100%;
+      max-width: 440px;
+      margin: 0 auto;
+      border-radius: 12px;
+      overflow: hidden;
+      background: #000;
+      border: 2px solid var(--border);
+    }
+    #reader {
+      width: 100%;
+    }
+    .scan-guide {
+      text-align: center;
+      color: var(--muted);
+      font-size: 0.85rem;
+      margin-top: 6px;
+    }
+    .manual-row {
+      display: flex;
+      gap: 8px;
+      background: var(--surface);
+      padding: 10px;
+      border-radius: 10px;
+      border: 1px solid var(--border);
+    }
+    .manual-row input {
+      flex: 1;
+      min-width: 0;
+      background: var(--surface-2);
+      color: var(--text);
+      border: 1px solid #475569;
+      border-radius: 6px;
+      padding: 8px 10px;
+      font-size: 0.9rem;
+    }
+    .btn-primary {
+      background: var(--accent);
+      color: #0f172a;
+      border: none;
+      border-radius: 6px;
+      padding: 8px 14px;
+      font-size: 0.9rem;
+      font-weight: 700;
+      cursor: pointer;
+      white-space: nowrap;
+    }
+    .status-banner {
+      padding: 10px 14px;
+      border-radius: 8px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      font-size: 0.88rem;
+      line-height: 1.5;
+      word-break: break-word;
+    }
+    .status-banner.error {
+      background: rgba(127, 29, 29, 0.45);
+      border-color: var(--danger);
+      color: #fecaca;
+    }
+    .panel {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 16px;
+      display: none;
+    }
+    .panel.show {
+      display: block;
+    }
+    .emp-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 12px;
+      padding-bottom: 12px;
+      border-bottom: 1px solid var(--border);
+      margin-bottom: 14px;
+      flex-wrap: wrap;
+    }
+    .emp-name {
+      font-size: 1.4rem;
+      font-weight: 800;
+    }
+    .emp-meta {
+      font-size: 0.85rem;
+      color: var(--muted);
+      margin-top: 2px;
+    }
+    .work-badge {
+      padding: 5px 12px;
+      border-radius: 999px;
+      font-size: 0.85rem;
+      font-weight: 700;
+      background: rgba(56, 189, 248, 0.18);
+      color: var(--accent);
+      border: 1px solid rgba(56, 189, 248, 0.4);
+    }
+    .work-badge.working {
+      background: rgba(34, 197, 94, 0.18);
+      color: #86efac;
+      border-color: rgba(34, 197, 94, 0.45);
+    }
+    .work-badge.done {
+      background: rgba(148, 163, 184, 0.18);
+      color: #cbd5e1;
+      border-color: rgba(148, 163, 184, 0.4);
+    }
+    .work-badge.alert {
+      background: rgba(245, 158, 11, 0.18);
+      color: #fcd34d;
+      border-color: rgba(245, 158, 11, 0.45);
+    }
+    .metrics-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 10px;
+      margin-bottom: 16px;
+    }
+    .metric-card {
+      background: var(--surface-2);
+      border: 1px solid #1e293b;
+      border-radius: 8px;
+      padding: 10px 12px;
+    }
+    .metric-label {
+      font-size: 0.78rem;
+      color: var(--muted);
+      margin-bottom: 4px;
+    }
+    .metric-val {
+      font-size: 1.15rem;
+      font-weight: 700;
+      font-variant-numeric: tabular-nums;
+    }
+    .logs-title {
+      font-size: 0.9rem;
+      font-weight: 700;
+      margin-bottom: 8px;
+      color: var(--muted);
+    }
+    .log-list {
+      list-style: none;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+    .log-item {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      background: var(--surface-2);
+      padding: 8px 12px;
+      border-radius: 8px;
+      font-size: 0.85rem;
+      gap: 8px;
+    }
+    .log-type {
+      font-weight: 700;
+      color: var(--accent);
+    }
+    .log-time {
+      color: var(--muted);
+      font-variant-numeric: tabular-nums;
+      white-space: nowrap;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <div class="title-group">
+        <h1>QR勤怠状況確認</h1>
+        <p id="today-label">----/--/--</p>
+      </div>
+      <div class="header-actions">
+        <button id="toggle-cam-btn" class="btn-sm active-cam" onclick="toggleCamera()">カメラ停止</button>
+        <button id="switch-cam-btn" class="btn-sm" onclick="switchCamera()">カメラ切替</button>
+        <a href="./index.html" class="btn-sm">打刻画面</a>
+        <a href="./card.html" class="btn-sm btn-qr-cards">社員証QR印刷</a>
+      </div>
+    </header>
+
+    <div>
+      <div id="reader-wrapper">
+        <div id="reader"></div>
+      </div>
+      <p id="scan-guide" class="scan-guide">社員証のQRコードをかざすと本日の勤怠状況を表示します</p>
+    </div>
+
+    <div class="manual-row">
+      <input id="manual-emp-id" type="text" placeholder="従業員IDを手入力して確認" onkeydown="if(event.key==='Enter') lookupByInput()">
+      <button class="btn-primary" onclick="lookupByInput()">照会</button>
+    </div>
+
+    <div id="status-banner" class="status-banner">QRコードを読み取るか、従業員IDを入力してください。</div>
+
+    <section id="result-panel" class="panel">
+      <div class="emp-header">
+        <div>
+          <div id="res-name" class="emp-name">-</div>
+          <div id="res-meta" class="emp-meta">ID: - / 部署: -</div>
+        </div>
+        <div id="res-work-badge" class="work-badge">-</div>
+      </div>
+
+      <div class="metrics-grid">
+        <div class="metric-card">
+          <div class="metric-label">出勤時刻</div>
+          <div id="res-clock-in" class="metric-val">--:--:--</div>
+        </div>
+        <div class="metric-card">
+          <div class="metric-label">退勤時刻</div>
+          <div id="res-clock-out" class="metric-val">--:--:--</div>
+        </div>
+        <div class="metric-card">
+          <div class="metric-label">休憩時間</div>
+          <div id="res-break-min" class="metric-val">- 分</div>
+        </div>
+        <div class="metric-card">
+          <div class="metric-label">承認ステータス</div>
+          <div id="res-approval" class="metric-val">-</div>
+        </div>
+      </div>
+
+      <div class="logs-title">本日の打刻履歴</div>
+      <ul id="res-logs" class="log-list"></ul>
+    </section>
+  </div>
+
+  <script>
+    const GAS_WEBAPP_URL = 'https://script.google.com/macros/s/AKfycbxXYd9al_H105tYO7RMG78hMoN27SQbEOaGy6vdst5IAUS0dhsHlx-3YdVPlMUIwGFy/exec';
+
+    const QR_CDN_LIST = [
+      'https://cdn.jsdelivr.net/npm/html5-qrcode@2.3.8/html5-qrcode.min.js',
+      'https://cdnjs.cloudflare.com/ajax/libs/html5-qrcode/2.3.8/html5-qrcode.min.js'
+    ];
+    let qrCdnIndex = 0;
+
+    let html5QrCode = null;
+    let facingMode = 'environment';
+    let currentCameraId = null;
+    let isCameraActive = false;
+    let isSwitchingCamera = false;
+    let isQuerying = false;
+    let lastScannedId = '';
+    let lastScannedAt = 0;
+
+    function updateTodayLabel() {
+      const now = new Date();
+      document.getElementById('today-label').textContent =
+        now.toLocaleDateString('ja-JP', { year: 'numeric', month: '2-digit', day: '2-digit', weekday: 'short' });
+    }
+    updateTodayLabel();
+
+    function tryNextQrCdn() {
+      if (typeof Html5Qrcode !== 'undefined') return;
+      if (qrCdnIndex >= QR_CDN_LIST.length) return;
+      const nextUrl = QR_CDN_LIST[qrCdnIndex++];
+      const s = document.createElement('script');
+      s.src = nextUrl;
+      s.onerror = () => tryNextQrCdn();
+      document.head.appendChild(s);
+    }
+
+    async function waitForHtml5Qrcode(timeoutMs = 5000) {
+      if (typeof Html5Qrcode !== 'undefined') return true;
+      if (qrCdnIndex === 0) tryNextQrCdn();
+      const start = Date.now();
+      while (typeof Html5Qrcode === 'undefined') {
+        if (Date.now() - start >= timeoutMs) return false;
+        await new Promise(r => setTimeout(r, 100));
+      }
+      return true;
+    }
+
+    function setBanner(msg, isError = false) {
+      const el = document.getElementById('status-banner');
+      el.textContent = msg;
+      el.className = isError ? 'status-banner error' : 'status-banner';
+    }
+
+    function updateCameraButtonUI() {
+      const btn = document.getElementById('toggle-cam-btn');
+      const guide = document.getElementById('scan-guide');
+      if (isCameraActive) {
+        btn.textContent = 'カメラ停止';
+        btn.classList.add('active-cam');
+        guide.textContent = '社員証のQRコードをかざすと本日の勤怠状況を表示します';
+      } else {
+        btn.textContent = 'カメラ起動';
+        btn.classList.remove('active-cam');
+        guide.textContent = 'カメラが停止中です。「カメラ起動」を押すかIDを入力してください';
+      }
+    }
+
+    function formatErr(err) {
+      if (!err) return '不明なエラー';
+      return (err.name ? `[${err.name}] ` : '') + (err.message || String(err));
+    }
+
+    function applyBadgeClass(el, workStatus) {
+      el.className = 'work-badge';
+      if (workStatus === '勤務中') {
+        el.classList.add('working');
+      } else if (workStatus === '退勤済') {
+        el.classList.add('done');
+      } else if (workStatus === '打刻漏れ') {
+        el.classList.add('alert');
+      }
+    }
+
+    function renderAttendanceStatus(data) {
+      const panel = document.getElementById('result-panel');
+      panel.classList.add('show');
+
+      const emp = data.employee || {};
+      const daily = data.daily || null;
+      const logs = Array.isArray(data.logs) ? data.logs : [];
+
+      document.getElementById('res-name').textContent = `${emp.name || '(氏名未設定)'} さん`;
+      document.getElementById('res-meta').textContent =
+        `ID: ${emp.id || '-'} / 部署: ${emp.dept || '未設定'} / 在籍: ${emp.status || '-'}`;
+
+      const badgeEl = document.getElementById('res-work-badge');
+      const workStatusText = daily ? (daily.workStatus || '未打刻') : '本日の打刻なし';
+      badgeEl.textContent = workStatusText;
+      applyBadgeClass(badgeEl, workStatusText);
+
+      document.getElementById('res-clock-in').textContent = (daily && daily.clockIn) ? daily.clockIn : '--:--:--';
+      document.getElementById('res-clock-out').textContent = (daily && daily.clockOut) ? daily.clockOut : '--:--:--';
+
+      const breakVal = (daily && daily.breakMinutes !== null && daily.breakMinutes !== undefined && daily.breakMinutes !== '')
+        ? `${daily.breakMinutes} 分`
+        : '- 分';
+      document.getElementById('res-break-min').textContent = breakVal;
+      document.getElementById('res-approval').textContent = (daily && daily.approvalStatus) ? daily.approvalStatus : '-';
+
+      const logListEl = document.getElementById('res-logs');
+      logListEl.innerHTML = '';
+      if (logs.length === 0) {
+        const li = document.createElement('li');
+        li.className = 'log-item';
+        li.textContent = '本日の打刻ログはありません。';
+        logListEl.appendChild(li);
+      } else {
+        logs.forEach(item => {
+          const li = document.createElement('li');
+          li.className = 'log-item';
+
+          const left = document.createElement('span');
+          left.className = 'log-type';
+          left.textContent = item.stampType || '-';
+
+          const mid = document.createElement('span');
+          mid.textContent = item.deviceName || '';
+
+          const right = document.createElement('span');
+          right.className = 'log-time';
+          right.textContent = item.time || '';
+
+          li.appendChild(left);
+          li.appendChild(mid);
+          li.appendChild(right);
+          logListEl.appendChild(li);
+        });
+      }
+
+      setBanner(`${data.date || ''} の勤怠状況を表示しました（${emp.name || emp.id}）。`);
+    }
+
+    async function fetchAttendanceStatus(empId) {
+      const cleanId = String(empId || '').trim();
+      if (!cleanId) {
+        setBanner('従業員IDを入力またはスキャンしてください。', true);
+        return;
+      }
+      if (isQuerying) return;
+      isQuerying = true;
+      setBanner(`従業員ID「${cleanId}」の勤怠状況を確認しています...`);
+
+      try {
+        const response = await fetch(GAS_WEBAPP_URL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+          body: JSON.stringify({
+            action: 'getEmployeeAttendanceStatus',
+            empId: cleanId
+          })
+        });
+
+        if (!response.ok) {
+          throw new Error(`HTTPステータス ${response.status}`);
+        }
+
+        const rawText = await response.text();
+        let json;
+        try {
+          json = JSON.parse(rawText);
+        } catch (e) {
+          throw new Error(`JSON解析失敗: ${rawText.slice(0, 180)}`);
+        }
+
+        if (!json || json.success === false) {
+          throw new Error((json && json.message) || '勤怠状況の取得に失敗しました。');
+        }
+
+        renderAttendanceStatus(json);
+      } catch (err) {
+        setBanner(`照会エラー: ${formatErr(err)}`, true);
+      } finally {
+        isQuerying = false;
+      }
+    }
+
+    function lookupByInput() {
+      const val = document.getElementById('manual-emp-id').value;
+      fetchAttendanceStatus(val);
+    }
+
+    function onScanSuccess(decodedText) {
+      const text = String(decodedText || '').trim();
+      if (!text || isQuerying || isSwitchingCamera) return;
+
+      const now = Date.now();
+      if (text === lastScannedId && (now - lastScannedAt) < 2500) {
+        return;
+      }
+      lastScannedId = text;
+      lastScannedAt = now;
+
+      document.getElementById('manual-emp-id').value = text;
+      fetchAttendanceStatus(text);
+    }
+
+    async function startScanner() {
+      try {
+        const ready = await waitForHtml5Qrcode(5000);
+        if (!ready || typeof Html5Qrcode === 'undefined') {
+          isCameraActive = false;
+          updateCameraButtonUI();
+          setBanner('QRライブラリ（Html5Qrcode）の読み込みに失敗しました。手入力でも照会できます。', true);
+          return;
+        }
+
+        if (!html5QrCode) {
+          html5QrCode = new Html5Qrcode('reader');
+        }
+
+        const config = {
+          fps: 10,
+          qrbox: { width: 220, height: 220 },
+          aspectRatio: 1.0
+        };
+
+        try {
+          await html5QrCode.start({ facingMode: facingMode }, config, onScanSuccess);
+          currentCameraId = null;
+          isCameraActive = true;
+          updateCameraButtonUI();
+          return;
+        } catch (facingErr) {
+          const cameras = await Html5Qrcode.getCameras();
+          if (!cameras || cameras.length === 0) throw facingErr;
+
+          const ordered = [
+            ...cameras.filter(c => c.id !== currentCameraId),
+            ...cameras.filter(c => c.id === currentCameraId)
+          ];
+
+          let lastErr = facingErr;
+          for (const cam of ordered) {
+            try {
+              await html5QrCode.start(cam.id, config, onScanSuccess);
+              currentCameraId = cam.id;
+              isCameraActive = true;
+              updateCameraButtonUI();
+              return;
+            } catch (camErr) {
+              lastErr = camErr;
+            }
+          }
+          throw lastErr;
+        }
+      } catch (err) {
+        isCameraActive = false;
+        updateCameraButtonUI();
+        setBanner(`カメラ起動エラー: ${formatErr(err)}`, true);
+      }
+    }
+
+    async function toggleCamera() {
+      if (isQuerying || isSwitchingCamera) return;
+      isSwitchingCamera = true;
+      if (isCameraActive) {
+        try {
+          if (html5QrCode && html5QrCode.isScanning) await html5QrCode.stop();
+        } catch (e) {}
+        try {
+          if (html5QrCode) await html5QrCode.clear();
+        } catch (e) {}
+        isCameraActive = false;
+        updateCameraButtonUI();
+      } else {
+        await startScanner();
+      }
+      isSwitchingCamera = false;
+    }
+
+    async function switchCamera() {
+      if (!html5QrCode || isQuerying || isSwitchingCamera) return;
+      isSwitchingCamera = true;
+      try {
+        if (html5QrCode.isScanning) await html5QrCode.stop();
+      } catch (e) {}
+      try {
+        await html5QrCode.clear();
+      } catch (e) {}
+      facingMode = (facingMode === 'environment') ? 'user' : 'environment';
+      await new Promise(r => setTimeout(r, 600));
+      await startScanner();
+      isSwitchingCamera = false;
+    }
+
+    window.addEventListener('load', startScanner);
+  </script>
+</body>
+</html>
