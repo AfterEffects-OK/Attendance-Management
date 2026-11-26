@@ -480,12 +480,13 @@
       document.getElementById('res-logs-title').textContent = `${targetDateDisp} の打刻履歴`;
 
       const logListEl = document.getElementById('res-logs');
+      const logFragment = document.createDocumentFragment();
       logListEl.innerHTML = '';
       if (logs.length === 0) {
         const li = document.createElement('li');
         li.className = 'log-item';
         li.textContent = `${targetDateDisp} の打刻ログはありません。`;
-        logListEl.appendChild(li);
+        logFragment.appendChild(li);
       } else {
         logs.forEach(item => {
           const li = document.createElement('li');
@@ -505,9 +506,10 @@
           li.appendChild(left);
           li.appendChild(mid);
           li.appendChild(right);
-          logListEl.appendChild(li);
+          logFragment.appendChild(li);
         });
       }
+      logListEl.appendChild(logFragment);
 
       setBanner(`${targetDateDisp} の勤怠状況を表示しました（${emp.name || emp.id}）。`);
       scrollToResultPanel();
@@ -665,7 +667,7 @@
         await html5QrCode.clear();
       } catch (e) {}
       facingMode = (facingMode === 'environment') ? 'user' : 'environment';
-      await new Promise(r => setTimeout(r, 600));
+      await new Promise(r => setTimeout(r, 200));
       await startScanner();
       isSwitchingCamera = false;
     }
