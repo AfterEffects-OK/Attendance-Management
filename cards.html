@@ -170,37 +170,9 @@
 
     function normalizeEmployeeList(res) {
       if (Array.isArray(res)) return res;
-      if (!res || typeof res !== 'object') return null;
-
-      const candidateKeys = ['employees', 'data', 'list', 'items', 'rows', 'records', 'result'];
-      for (const k of candidateKeys) {
-        if (Array.isArray(res[k])) return res[k];
-      }
-      if (res.data && typeof res.data === 'object') {
-        for (const k of candidateKeys) {
-          if (Array.isArray(res.data[k])) return res.data[k];
-        }
-      }
+      if (res && Array.isArray(res.employees)) return res.employees;
+      if (res && Array.isArray(res.data)) return res.data;
       return null;
-    }
-
-    async function postAction(actionName) {
-      const response = await fetch(GAS_WEBAPP_URL, {
-        method: 'POST',
-        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-        body: JSON.stringify({ action: actionName })
-      });
-      if (!response.ok) {
-        throw new Error(`HTTPステータス ${response.status} が返されました。`);
-      }
-      const rawText = await response.text();
-      let json;
-      try {
-        json = JSON.parse(rawText);
-      } catch (e) {
-        throw new Error(`JSON解析失敗: ${rawText.slice(0, 180)}`);
-      }
-      return { json, rawText };
     }
 
     function renderCards(employees) {
@@ -265,28 +237,38 @@
       setStatus('従業員データを読み込んでいます...');
       document.getElementById('cards-grid').innerHTML = '';
 
-      const actionsToTry = ['getEmployees', 'getEmployeeList', 'listEmployees'];
-      const details = [];
+      try {
+        const response = await fetch(GAS_WEBAPP_URL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+          body: JSON.stringify({ action: 'getEmployees' })
+        });
 
-      for (const act of actionsToTry) {
-        try {
-          const { json, rawText } = await postAction(act);
-          if (json && json.success === false) {
-            details.push(`${act}: ${json.message || 'success:false'}`);
-            continue;
-          }
-          const list = normalizeEmployeeList(json);
-          if (list) {
-            renderCards(list);
-            return;
-          }
-          details.push(`${act}: 配列なし (${rawText.slice(0, 120)})`);
-        } catch (err) {
-          details.push(`${act}: ${err.message}`);
+        if (!response.ok) {
+          throw new Error(`HTTPステータス ${response.status} が返されました。`);
         }
-      }
 
-      setStatus(`読み込みエラー: ${details.join(' / ')}`, true);
+        const rawText = await response.text();
+        let res;
+        try {
+          res = JSON.parse(rawText);
+        } catch (e) {
+          throw new Error(`JSON解析失敗: ${rawText.slice(0, 180)}`);
+        }
+
+        if (res && res.success === false) {
+          throw new Error(res.message || 'GAS側でエラーが返されました。');
+        }
+
+        const list = normalizeEmployeeList(res);
+        if (!list) {
+          throw new Error(`想定外のレスポンス形式です: ${rawText.slice(0, 180)}`);
+        }
+
+        renderCards(list);
+      } catch (err) {
+        setStatus(`読み込みエラー: ${err.message}`, true);
+      }
     }
 
     window.addEventListener('load', loadEmployees);
