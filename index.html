@@ -168,8 +168,10 @@
 
     let currentMode = 'AUTO';
     let isProcessing = false;
+    let isSwitchingCamera = false;
     let html5QrCode = null;
     let facingMode = 'environment';
+    let currentCameraId = null;
 
     function updateClock() {
       const now = new Date();
@@ -243,7 +245,7 @@
     }
 
     async function onScanSuccess(decodedText) {
-      if (isProcessing) return;
+      if (isProcessing || isSwitchingCamera) return;
       isProcessing = true;
 
       showOverlay('loading', '確認中...', decodedText, '打刻データを記録しています');
@@ -286,26 +288,55 @@
       }
     }
 
-    function startScanner() {
-      html5QrCode = new Html5QrCode('reader');
-      const config = {
-        fps: 10,
-        qrbox: { width: 240, height: 240 },
-        aspectRatio: 1.0
-      };
+    async function startScanner() {
+      try {
+        if (!html5QrCode) {
+          html5QrCode = new Html5QrCode('reader');
+        }
 
-      html5QrCode.start({ facingMode: facingMode }, config, onScanSuccess)
-        .catch(err => {
-          showOverlay('error', 'カメラ起動エラー', '', 'カメラへのアクセスを許可してください: ' + err);
-        });
+        const config = {
+          fps: 10,
+          qrbox: { width: 240, height: 240 },
+          aspectRatio: 1.0
+        };
+
+        const cameras = await Html5Qrcode.getCameras();
+        if (cameras && cameras.length > 0) {
+          const target = cameras.find(cam => {
+            const label = (cam.label || '').toLowerCase();
+            if (facingMode === 'environment') {
+              return /back|rear|environment|背面|外/.test(label);
+            }
+            return /front|user|face|前面|内/.test(label);
+          }) || cameras.find(cam => cam.id !== currentCameraId) || cameras[0];
+
+          currentCameraId = target.id;
+          await html5QrCode.start(currentCameraId, config, onScanSuccess);
+        } else {
+          await html5QrCode.start({ facingMode: facingMode }, config, onScanSuccess);
+        }
+      } catch (err) {
+        showOverlay('error', 'カメラ起動エラー', '', 'カメラへのアクセスを確認してください: ' + err, 3000);
+      }
     }
 
-    function switchCamera() {
-      if (!html5QrCode) return;
-      html5QrCode.stop().then(() => {
-        facingMode = (facingMode === 'environment') ? 'user' : 'environment';
-        startScanner();
-      });
+    async function switchCamera() {
+      if (!html5QrCode || isProcessing || isSwitchingCamera) return;
+      isSwitchingCamera = true;
+
+      try {
+        if (html5QrCode.isScanning) {
+          await html5QrCode.stop();
+        }
+        await html5QrCode.clear();
+      } catch (e) {
+        // 停止済み・未開始時のエラーは無視して再起動へ進む
+      }
+
+      facingMode = (facingMode === 'environment') ? 'user' : 'environment';
+      await new Promise(resolve => setTimeout(resolve, 250));
+      await startScanner();
+      isSwitchingCamera = false;
     }
 
     window.addEventListener('load', startScanner);
