@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
   <title>QR勤怠打刻</title>
-  <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js" onerror="loadFallbackQrLib()"></script>
+  <script id="qr-lib-primary" src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js" onerror="tryNextQrCdn()"></script>
   <style>
     :root {
       --bg: #0f172a;
@@ -90,10 +90,6 @@
       overflow: hidden;
       background: #000;
       border: 2px solid #334155;
-      min-height: 240px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
     }
     #reader {
       width: 100%;
@@ -151,7 +147,7 @@
       <div id="clock-display" class="clock">00:00:00</div>
     </div>
     <div class="header-actions">
-      <button id="toggle-cam-btn" class="btn-sm" onclick="toggleCamera()">カメラ起動</button>
+      <button id="toggle-cam-btn" class="btn-sm active-cam" onclick="toggleCamera()">カメラ停止</button>
       <button id="switch-cam-btn" class="btn-sm" onclick="switchCamera()">カメラ切替</button>
       <a href="./cards.html" class="btn-sm">社員証QR印刷</a>
     </div>
@@ -166,7 +162,7 @@
   <div id="reader-wrapper">
     <div id="reader"></div>
   </div>
-  <p id="scan-guide" class="scan-guide">「カメラ起動」を押してQRコードをかざしてください</p>
+  <p id="scan-guide" class="scan-guide">QRコード（従業員ID）をカメラ枠内にかざしてください</p>
 
   <div id="overlay">
     <div id="overlay-badge" class="badge">処理中</div>
@@ -178,6 +174,12 @@
     // GASウェブアプリのデプロイURLを設定してください
     const GAS_WEBAPP_URL = 'https://script.google.com/macros/s/あなたのデプロイID/exec';
 
+    const QR_CDN_LIST = [
+      'https://cdn.jsdelivr.net/npm/html5-qrcode@2.3.8/html5-qrcode.min.js',
+      'https://cdnjs.cloudflare.com/ajax/libs/html5-qrcode/2.3.8/html5-qrcode.min.js'
+    ];
+    let qrCdnIndex = 0;
+
     let currentMode = 'AUTO';
     let isProcessing = false;
     let isSwitchingCamera = false;
@@ -186,10 +188,29 @@
     let facingMode = 'environment';
     let currentCameraId = null;
 
-    function loadFallbackQrLib() {
+    function tryNextQrCdn() {
+      if (typeof Html5Qrcode !== 'undefined') return;
+      if (qrCdnIndex >= QR_CDN_LIST.length) return;
+      const nextUrl = QR_CDN_LIST[qrCdnIndex++];
       const s = document.createElement('script');
-      s.src = 'https://cdn.jsdelivr.net/npm/html5-qrcode@2.3.8/html5-qrcode.min.js';
+      s.src = nextUrl;
+      s.onerror = () => tryNextQrCdn();
       document.head.appendChild(s);
+    }
+
+    async function waitForHtml5Qrcode(timeoutMs = 5000) {
+      if (typeof Html5Qrcode !== 'undefined') return true;
+      if (qrCdnIndex === 0) {
+        tryNextQrCdn();
+      }
+      const start = Date.now();
+      while (typeof Html5Qrcode === 'undefined') {
+        if (Date.now() - start >= timeoutMs) {
+          return false;
+        }
+        await new Promise(resolve => setTimeout(resolve, 100));
+      }
+      return true;
     }
 
     function updateClock() {
@@ -212,7 +233,7 @@
       } else {
         btn.textContent = 'カメラ起動';
         btn.classList.remove('active-cam');
-        guide.textContent = '「カメラ起動」を押してQRコードをかざしてください';
+        guide.textContent = 'カメラが停止中です。「カメラ起動」を押して開始してください';
       }
     }
 
@@ -330,43 +351,18 @@
       }
     }
 
-    async function stopScanner() {
-      if (!html5QrCode) {
-        isCameraActive = false;
-        updateCameraButtonUI();
-        return;
-      }
-      try {
-        if (html5QrCode.isScanning) {
-          await html5QrCode.stop();
-        }
-      } catch (e) {}
-      try {
-        await html5QrCode.clear();
-      } catch (e) {}
-      isCameraActive = false;
-      updateCameraButtonUI();
-    }
-
     async function startScanner() {
       try {
-        if (!window.isSecureContext) {
+        const ready = await waitForHtml5Qrcode(5000);
+        if (!ready || typeof Html5Qrcode === 'undefined') {
           isCameraActive = false;
           updateCameraButtonUI();
-          showOverlay('error', 'カメラ起動エラー', '', 'HTTPS環境で開いてください。', 4000);
+          showOverlay('error', 'カメラ起動エラー', '', 'QRライブラリ（Html5Qrcode）の読み込みに失敗しました。通信環境や広告ブロックをご確認ください。', 4500);
           return;
         }
 
-        if (typeof Html5Qrcode === 'undefined') {
-          isCameraActive = false;
-          updateCameraButtonUI();
-          showOverlay('error', 'カメラ起動エラー', '', '[ReferenceError] Html5Qrcode ライブラリが読み込まれていません。', 4500);
-          return;
-        }
-
-        await stopScanner();
         if (!html5QrCode) {
-          html5QrCode = new Html5QrCode('reader');
+          html5QrCode = new Html5Qrcode('reader');
         }
 
         const config = {
@@ -417,7 +413,18 @@
       if (isProcessing || isSwitchingCamera) return;
       isSwitchingCamera = true;
       if (isCameraActive) {
-        await stopScanner();
+        try {
+          if (html5QrCode && html5QrCode.isScanning) {
+            await html5QrCode.stop();
+          }
+        } catch (e) {}
+        try {
+          if (html5QrCode) {
+            await html5QrCode.clear();
+          }
+        } catch (e) {}
+        isCameraActive = false;
+        updateCameraButtonUI();
       } else {
         await startScanner();
       }
@@ -425,16 +432,26 @@
     }
 
     async function switchCamera() {
-      if (isProcessing || isSwitchingCamera) return;
+      if (!html5QrCode || isProcessing || isSwitchingCamera) return;
       isSwitchingCamera = true;
 
-      await stopScanner();
+      try {
+        if (html5QrCode.isScanning) {
+          await html5QrCode.stop();
+        }
+      } catch (e) {}
+
+      try {
+        await html5QrCode.clear();
+      } catch (e) {}
 
       facingMode = (facingMode === 'environment') ? 'user' : 'environment';
       await new Promise(resolve => setTimeout(resolve, 600));
       await startScanner();
       isSwitchingCamera = false;
     }
+
+    window.addEventListener('load', startScanner);
   </script>
 </body>
 </html>
