@@ -93,17 +93,37 @@
       font-size: 0.85rem;
       margin-top: 6px;
     }
-    .manual-row {
+    .lookup-box {
       display: flex;
+      flex-direction: column;
       gap: 8px;
       background: var(--surface);
       padding: 10px;
       border-radius: 10px;
       border: 1px solid var(--border);
     }
-    .manual-row input {
+    .lookup-row {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+    .lookup-row label {
+      font-size: 0.82rem;
+      color: var(--muted);
+      white-space: nowrap;
+    }
+    .lookup-row input[type="date"] {
+      background: var(--surface-2);
+      color: var(--text);
+      border: 1px solid #475569;
+      border-radius: 6px;
+      padding: 7px 10px;
+      font-size: 0.9rem;
+    }
+    .lookup-row input[type="text"] {
       flex: 1;
-      min-width: 0;
+      min-width: 140px;
       background: var(--surface-2);
       color: var(--text);
       border: 1px solid #475569;
@@ -263,15 +283,22 @@
       <div id="reader-wrapper">
         <div id="reader"></div>
       </div>
-      <p id="scan-guide" class="scan-guide">社員証のQRコードをかざすと本日の勤怠状況を表示します</p>
+      <p id="scan-guide" class="scan-guide">社員証のQRコードをかざすと指定日の勤怠状況を表示します</p>
     </div>
 
-    <div class="manual-row">
-      <input id="manual-emp-id" type="text" placeholder="従業員IDを手入力して確認" onkeydown="if(event.key==='Enter') lookupByInput()">
-      <button class="btn-primary" onclick="lookupByInput()">照会</button>
+    <div class="lookup-box">
+      <div class="lookup-row">
+        <label for="target-date">対象日:</label>
+        <input id="target-date" type="date" onchange="onTargetDateChange()">
+        <button class="btn-sm" onclick="setTodayDate()">今日に戻す</button>
+      </div>
+      <div class="lookup-row">
+        <input id="manual-emp-id" type="text" placeholder="従業員IDを手入力して確認" onkeydown="if(event.key==='Enter') lookupByInput()">
+        <button class="btn-primary" onclick="lookupByInput()">照会</button>
+      </div>
     </div>
 
-    <div id="status-banner" class="status-banner">QRコードを読み取るか、従業員IDを入力してください。</div>
+    <div id="status-banner" class="status-banner">対象日と従業員IDを指定するか、QRコードを読み取ってください。</div>
 
     <section id="result-panel" class="panel">
       <div class="emp-header">
@@ -301,7 +328,7 @@
         </div>
       </div>
 
-      <div class="logs-title">本日の打刻履歴</div>
+      <div class="logs-title" id="res-logs-title">対象日の打刻履歴</div>
       <ul id="res-logs" class="log-list"></ul>
     </section>
   </div>
@@ -323,13 +350,37 @@
     let isQuerying = false;
     let lastScannedId = '';
     let lastScannedAt = 0;
+    let currentCheckedEmpId = '';
+
+    function getLocalIsoDate(d = new Date()) {
+      const y = d.getFullYear();
+      const m = String(d.getMonth() + 1).padStart(2, '0');
+      const day = String(d.getDate()).padStart(2, '0');
+      return `${y}-${m}-${day}`;
+    }
 
     function updateTodayLabel() {
       const now = new Date();
       document.getElementById('today-label').textContent =
-        now.toLocaleDateString('ja-JP', { year: 'numeric', month: '2-digit', day: '2-digit', weekday: 'short' });
+        '本日: ' + now.toLocaleDateString('ja-JP', { year: 'numeric', month: '2-digit', day: '2-digit', weekday: 'short' });
+      const dateInput = document.getElementById('target-date');
+      if (dateInput && !dateInput.value) {
+        dateInput.value = getLocalIsoDate(now);
+      }
     }
     updateTodayLabel();
+
+    function setTodayDate() {
+      document.getElementById('target-date').value = getLocalIsoDate(new Date());
+      onTargetDateChange();
+    }
+
+    function onTargetDateChange() {
+      const idVal = document.getElementById('manual-emp-id').value.trim() || currentCheckedEmpId;
+      if (idVal) {
+        fetchAttendanceStatus(idVal, document.getElementById('target-date').value);
+      }
+    }
 
     function tryNextQrCdn() {
       if (typeof Html5Qrcode !== 'undefined') return;
@@ -364,11 +415,11 @@
       if (isCameraActive) {
         btn.textContent = 'カメラ停止';
         btn.classList.add('active-cam');
-        guide.textContent = '社員証のQRコードをかざすと本日の勤怠状況を表示します';
+        guide.textContent = '社員証のQRコードをかざすと指定日の勤怠状況を表示します';
       } else {
         btn.textContent = 'カメラ起動';
         btn.classList.remove('active-cam');
-        guide.textContent = 'カメラが停止中です。「カメラ起動」を押すかIDを入力してください';
+        guide.textContent = 'カメラが停止中です。「カメラ起動」を押すかID・日付を入力してください';
       }
     }
 
@@ -395,13 +446,16 @@
       const emp = data.employee || {};
       const daily = data.daily || null;
       const logs = Array.isArray(data.logs) ? data.logs : [];
+      const targetDateDisp = data.date || document.getElementById('target-date').value || '';
+
+      currentCheckedEmpId = emp.id || currentCheckedEmpId;
 
       document.getElementById('res-name').textContent = `${emp.name || '(氏名未設定)'} さん`;
       document.getElementById('res-meta').textContent =
         `ID: ${emp.id || '-'} / 部署: ${emp.dept || '未設定'} / 在籍: ${emp.status || '-'}`;
 
       const badgeEl = document.getElementById('res-work-badge');
-      const workStatusText = daily ? (daily.workStatus || '未打刻') : '本日の打刻なし';
+      const workStatusText = daily ? (daily.workStatus || '記録あり') : '該当日の打刻なし';
       badgeEl.textContent = workStatusText;
       applyBadgeClass(badgeEl, workStatusText);
 
@@ -414,12 +468,14 @@
       document.getElementById('res-break-min').textContent = breakVal;
       document.getElementById('res-approval').textContent = (daily && daily.approvalStatus) ? daily.approvalStatus : '-';
 
+      document.getElementById('res-logs-title').textContent = `${targetDateDisp} の打刻履歴`;
+
       const logListEl = document.getElementById('res-logs');
       logListEl.innerHTML = '';
       if (logs.length === 0) {
         const li = document.createElement('li');
         li.className = 'log-item';
-        li.textContent = '本日の打刻ログはありません。';
+        li.textContent = `${targetDateDisp} の打刻ログはありません。`;
         logListEl.appendChild(li);
       } else {
         logs.forEach(item => {
@@ -444,18 +500,20 @@
         });
       }
 
-      setBanner(`${data.date || ''} の勤怠状況を表示しました（${emp.name || emp.id}）。`);
+      setBanner(`${targetDateDisp} の勤怠状況を表示しました（${emp.name || emp.id}）。`);
     }
 
-    async function fetchAttendanceStatus(empId) {
+    async function fetchAttendanceStatus(empId, targetDate) {
       const cleanId = String(empId || '').trim();
+      const cleanDate = String(targetDate || document.getElementById('target-date').value || getLocalIsoDate()).trim();
+
       if (!cleanId) {
         setBanner('従業員IDを入力またはスキャンしてください。', true);
         return;
       }
       if (isQuerying) return;
       isQuerying = true;
-      setBanner(`従業員ID「${cleanId}」の勤怠状況を確認しています...`);
+      setBanner(`${cleanDate} / 従業員ID「${cleanId}」の勤怠状況を確認しています...`);
 
       try {
         const response = await fetch(GAS_WEBAPP_URL, {
@@ -463,7 +521,8 @@
           headers: { 'Content-Type': 'text/plain;charset=utf-8' },
           body: JSON.stringify({
             action: 'getEmployeeAttendanceStatus',
-            empId: cleanId
+            empId: cleanId,
+            date: cleanDate
           })
         });
 
@@ -493,7 +552,8 @@
 
     function lookupByInput() {
       const val = document.getElementById('manual-emp-id').value;
-      fetchAttendanceStatus(val);
+      const dt = document.getElementById('target-date').value;
+      fetchAttendanceStatus(val, dt);
     }
 
     function onScanSuccess(decodedText) {
@@ -508,7 +568,7 @@
       lastScannedAt = now;
 
       document.getElementById('manual-emp-id').value = text;
-      fetchAttendanceStatus(text);
+      fetchAttendanceStatus(text, document.getElementById('target-date').value);
     }
 
     async function startScanner() {
