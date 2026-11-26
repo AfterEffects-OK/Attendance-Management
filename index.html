@@ -90,6 +90,10 @@
       overflow: hidden;
       background: #000;
       border: 2px solid #334155;
+      min-height: 240px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
     }
     #reader {
       width: 100%;
@@ -147,7 +151,7 @@
       <div id="clock-display" class="clock">00:00:00</div>
     </div>
     <div class="header-actions">
-      <button id="toggle-cam-btn" class="btn-sm active-cam" onclick="toggleCamera()">カメラ停止</button>
+      <button id="toggle-cam-btn" class="btn-sm" onclick="toggleCamera()">カメラ起動</button>
       <button id="switch-cam-btn" class="btn-sm" onclick="switchCamera()">カメラ切替</button>
       <a href="./cards.html" class="btn-sm">社員証QR印刷</a>
     </div>
@@ -162,7 +166,7 @@
   <div id="reader-wrapper">
     <div id="reader"></div>
   </div>
-  <p id="scan-guide" class="scan-guide">QRコード（従業員ID）をカメラ枠内にかざしてください</p>
+  <p id="scan-guide" class="scan-guide">「カメラ起動」を押してQRコードをかざしてください</p>
 
   <div id="overlay">
     <div id="overlay-badge" class="badge">処理中</div>
@@ -185,7 +189,6 @@
     function loadFallbackQrLib() {
       const s = document.createElement('script');
       s.src = 'https://cdn.jsdelivr.net/npm/html5-qrcode@2.3.8/html5-qrcode.min.js';
-      s.onload = () => startScanner();
       document.head.appendChild(s);
     }
 
@@ -209,7 +212,7 @@
       } else {
         btn.textContent = 'カメラ起動';
         btn.classList.remove('active-cam');
-        guide.textContent = 'カメラが停止中です。「カメラ起動」を押して開始してください';
+        guide.textContent = '「カメラ起動」を押してQRコードをかざしてください';
       }
     }
 
@@ -361,6 +364,7 @@
           return;
         }
 
+        await stopScanner();
         if (!html5QrCode) {
           html5QrCode = new Html5QrCode('reader');
         }
@@ -421,7 +425,7 @@
     }
 
     async function switchCamera() {
-      if (!html5QrCode || isProcessing || isSwitchingCamera) return;
+      if (isProcessing || isSwitchingCamera) return;
       isSwitchingCamera = true;
 
       await stopScanner();
@@ -431,8 +435,6 @@
       await startScanner();
       isSwitchingCamera = false;
     }
-
-    window.addEventListener('load', startScanner);
   </script>
 </body>
 </html>
