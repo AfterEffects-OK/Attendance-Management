@@ -130,18 +130,6 @@
       line-height: 1.6;
       opacity: 0.95;
       word-break: break-word;
-      max-width: 420px;
-    }
-    .retry-btn {
-      margin-top: 18px;
-      background: #ffffff;
-      color: #0f172a;
-      border: none;
-      padding: 10px 20px;
-      border-radius: 8px;
-      font-weight: 700;
-      font-size: 0.95rem;
-      cursor: pointer;
     }
   </style>
 </head>
@@ -173,7 +161,6 @@
     <div id="overlay-badge" class="badge">処理中</div>
     <div id="overlay-name" class="emp-name"></div>
     <div id="overlay-msg" class="detail-msg"></div>
-    <button id="overlay-retry" class="retry-btn" style="display:none;" onclick="retryCameraFromOverlay()">カメラを再起動</button>
   </div>
 
   <script>
@@ -188,7 +175,6 @@
     let currentCameraId = null;
 
     function loadFallbackQrLib() {
-      if (typeof Html5Qrcode !== 'undefined') return;
       const s = document.createElement('script');
       s.src = 'https://cdn.jsdelivr.net/npm/html5-qrcode@2.3.8/html5-qrcode.min.js';
       s.onload = () => startScanner();
@@ -238,31 +224,22 @@
       } catch (e) {}
     }
 
-    function showOverlay(statusClass, badgeText, nameText, msgText, autoHideMs = 0, showRetry = false) {
+    function showOverlay(statusClass, badgeText, nameText, msgText, autoHideMs = 0) {
       const overlay = document.getElementById('overlay');
-      const retryBtn = document.getElementById('overlay-retry');
       overlay.className = 'show ' + statusClass;
       document.getElementById('overlay-badge').textContent = badgeText;
       document.getElementById('overlay-name').textContent = nameText;
       document.getElementById('overlay-msg').innerHTML = msgText;
-      retryBtn.style.display = showRetry ? 'inline-block' : 'none';
 
       if (autoHideMs > 0) {
         setTimeout(() => {
           overlay.className = '';
-          retryBtn.style.display = 'none';
           if (currentMode !== 'AUTO') {
             document.querySelector('.mode-btn[data-mode="AUTO"]').click();
           }
           isProcessing = false;
         }, autoHideMs);
       }
-    }
-
-    function hideOverlayImmediately() {
-      const overlay = document.getElementById('overlay');
-      overlay.className = '';
-      document.getElementById('overlay-retry').style.display = 'none';
     }
 
     function formatCameraError(err) {
@@ -328,124 +305,77 @@
       }
     }
 
-    async function stopAndResetScanner() {
-      if (html5QrCode) {
-        try {
-          if (html5QrCode.isScanning) {
-            await html5QrCode.stop();
-          }
-        } catch (e) {}
-        try {
-          await html5QrCode.clear();
-        } catch (e) {}
-      }
-      html5QrCode = new Html5QrCode('reader');
-    }
-
     async function startScanner() {
       try {
         if (!window.isSecureContext) {
-          showOverlay('error', 'カメラ起動エラー', '', 'HTTPS環境で開いてください。', 0, true);
+          showOverlay('error', 'カメラ起動エラー', '', 'HTTPS環境で開いてください。', 4000);
           return;
         }
 
-        if (typeof Html5Qrcode === 'undefined' || !navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-          showOverlay('error', 'カメラ起動エラー', '', 'このブラウザまたは環境ではカメラAPIを利用できません。', 0, true);
+        if (typeof Html5Qrcode === 'undefined') {
+          showOverlay('error', 'カメラ起動エラー', '', '[ReferenceError] Html5Qrcode ライブラリが読み込まれていません。', 4500);
           return;
         }
 
         if (!html5QrCode) {
-          html5QrCode = new Html5QrCode('reader');
+          html5QrCode = new Html5Qrcode('reader');
         }
 
-        const primaryConfig = {
+        const config = {
           fps: 10,
           qrbox: { width: 240, height: 240 },
           aspectRatio: 1.0
         };
 
-        const looseConfig = {
-          fps: 10,
-          qrbox: { width: 220, height: 220 }
-        };
-
-        // 1. facingMode 理想値で試行
         try {
-          await html5QrCode.start({ facingMode: { ideal: facingMode } }, primaryConfig, onScanSuccess);
+          await html5QrCode.start({ facingMode: facingMode }, config, onScanSuccess);
           currentCameraId = null;
           return;
-        } catch (e1) {}
-
-        // 2. カメラ一覧を取得して向き・別IDで試行
-        try {
+        } catch (facingErr) {
           const cameras = await Html5Qrcode.getCameras();
-          if (cameras && cameras.length > 0) {
-            const preferred = cameras.filter(cam => {
-              const label = (cam.label || '').toLowerCase();
-              if (facingMode === 'environment') {
-                return /back|rear|environment|背面|外/.test(label);
-              }
-              return /front|user|face|前面|内/.test(label);
-            });
-
-            const candidates = [
-              ...preferred.filter(c => c.id !== currentCameraId),
-              ...cameras.filter(c => c.id !== currentCameraId),
-              ...cameras
-            ];
-
-            let lastErr = e1;
-            for (const cam of candidates) {
-              try {
-                await html5QrCode.start(cam.id, primaryConfig, onScanSuccess);
-                currentCameraId = cam.id;
-                return;
-              } catch (camErr) {
-                lastErr = camErr;
-                try {
-                  await html5QrCode.start(cam.id, looseConfig, onScanSuccess);
-                  currentCameraId = cam.id;
-                  return;
-                } catch (looseErr) {
-                  lastErr = looseErr;
-                }
-              }
-            }
-            throw lastErr;
+          if (!cameras || cameras.length === 0) {
+            throw facingErr;
           }
-          throw e1;
-        } catch (e2) {
-          // 3. 最終フォールバック（制約なし facingMode）
-          await html5QrCode.start({ facingMode: facingMode }, looseConfig, onScanSuccess);
-          currentCameraId = null;
+
+          const orderedCameras = [
+            ...cameras.filter(c => c.id !== currentCameraId),
+            ...cameras.filter(c => c.id === currentCameraId)
+          ];
+
+          let lastErr = facingErr;
+          for (const cam of orderedCameras) {
+            try {
+              await html5QrCode.start(cam.id, config, onScanSuccess);
+              currentCameraId = cam.id;
+              return;
+            } catch (camErr) {
+              lastErr = camErr;
+            }
+          }
+          throw lastErr;
         }
       } catch (err) {
-        showOverlay('error', 'カメラ起動エラー', '', formatCameraError(err), 0, true);
+        showOverlay('error', 'カメラ起動エラー', '', formatCameraError(err), 4500);
       }
     }
 
     async function switchCamera() {
-      if (isProcessing || isSwitchingCamera) return;
+      if (!html5QrCode || isProcessing || isSwitchingCamera) return;
       isSwitchingCamera = true;
-      hideOverlayImmediately();
 
-      await stopAndResetScanner();
+      try {
+        if (html5QrCode.isScanning) {
+          await html5QrCode.stop();
+        }
+      } catch (e) {}
+
+      try {
+        await html5QrCode.clear();
+      } catch (e) {}
+
       facingMode = (facingMode === 'environment') ? 'user' : 'environment';
-      await new Promise(resolve => setTimeout(resolve, 700));
+      await new Promise(resolve => setTimeout(resolve, 600));
       await startScanner();
-
-      isSwitchingCamera = false;
-    }
-
-    async function retryCameraFromOverlay() {
-      if (isSwitchingCamera) return;
-      isSwitchingCamera = true;
-      hideOverlayImmediately();
-
-      await stopAndResetScanner();
-      await new Promise(resolve => setTimeout(resolve, 400));
-      await startScanner();
-
       isSwitchingCamera = false;
     }
 
