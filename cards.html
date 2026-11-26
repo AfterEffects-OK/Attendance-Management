@@ -185,9 +185,9 @@
       }
 
       employees.forEach((emp, idx) => {
-        const empId = String(emp.empId || emp['従業員ID'] || emp.id || '').trim();
+        const empId = String(emp.id || emp.empId || emp['従業員ID'] || '').trim();
         const name = String(emp.name || emp['氏名'] || emp.employeeName || '').trim();
-        const dept = String(emp.dept || emp['現所属部署'] || emp['部署・所属'] || '').trim();
+        const dept = String(emp.dept || emp.deptName || emp['現所属部署'] || emp['部署・所属'] || '').trim();
         const status = String(emp.status || emp['在籍ステータス'] || '').trim();
 
         const card = document.createElement('div');
@@ -203,7 +203,7 @@
 
         const deptEl = document.createElement('div');
         deptEl.className = 'emp-dept';
-        deptEl.textContent = dept || '所属未設定';
+        deptEl.textContent = dept || '未設定';
 
         const qrEl = document.createElement('div');
         qrEl.className = 'qr-box';
@@ -241,7 +241,10 @@
         const response = await fetch(GAS_WEBAPP_URL, {
           method: 'POST',
           headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-          body: JSON.stringify({ action: 'getEmployees' })
+          body: JSON.stringify({
+            action: 'getEmployeesForQrCards',
+            onlyActive: false
+          })
         });
 
         if (!response.ok) {
