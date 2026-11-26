@@ -59,6 +59,11 @@
       border-color: var(--accent);
       color: var(--accent);
     }
+    @media (max-width: 640px) {
+      .btn-qr-cards {
+        display: none;
+      }
+    }
     .mode-selector {
       display: grid;
       grid-template-columns: repeat(3, 1fr);
@@ -149,7 +154,7 @@
     <div class="header-actions">
       <button id="toggle-cam-btn" class="btn-sm active-cam" onclick="toggleCamera()">カメラ停止</button>
       <button id="switch-cam-btn" class="btn-sm" onclick="switchCamera()">カメラ切替</button>
-      <a href="./cards.html" class="btn-sm">社員証QR印刷</a>
+      <a href="./card.html" class="btn-sm btn-qr-cards">社員証QR印刷</a>
     </div>
   </header>
 
@@ -171,8 +176,7 @@
   </div>
 
   <script>
-    // GASウェブアプリのデプロイURLを設定してください
-    const GAS_WEBAPP_URL = 'https://script.google.com/macros/s/あなたのデプロイID/exec';
+    const GAS_WEBAPP_URL = 'https://script.google.com/macros/s/AKfycbxXYd9al_H105tYO7RMG78hMoN27SQbEOaGy6vdst5IAUS0dhsHlx-3YdVPlMUIwGFy/exec';
 
     const QR_CDN_LIST = [
       'https://cdn.jsdelivr.net/npm/html5-qrcode@2.3.8/html5-qrcode.min.js',
