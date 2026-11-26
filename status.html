@@ -162,6 +162,7 @@
       border-radius: 12px;
       padding: 16px;
       display: none;
+      scroll-margin-top: 12px;
     }
     .panel.show {
       display: block;
@@ -439,6 +440,14 @@
       }
     }
 
+    function scrollToResultPanel() {
+      const panel = document.getElementById('result-panel');
+      if (!panel || !panel.classList.contains('show')) return;
+      requestAnimationFrame(() => {
+        panel.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      });
+    }
+
     function renderAttendanceStatus(data) {
       const panel = document.getElementById('result-panel');
       panel.classList.add('show');
@@ -501,6 +510,7 @@
       }
 
       setBanner(`${targetDateDisp} の勤怠状況を表示しました（${emp.name || emp.id}）。`);
+      scrollToResultPanel();
     }
 
     async function fetchAttendanceStatus(empId, targetDate) {
