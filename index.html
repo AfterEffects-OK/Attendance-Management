@@ -1,0 +1,314 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+  <title>QR勤怠打刻</title>
+  <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+  <style>
+    :root {
+      --bg: #0f172a;
+      --surface: #1e293b;
+      --text: #f8fafc;
+      --muted: #94a3b8;
+      --accent: #38bdf8;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background-color: var(--bg);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Hiragino Kaku Gothic ProN", sans-serif;
+      display: flex;
+      flex-direction: column;
+      min-height: 100vh;
+      padding: 12px;
+      user-select: none;
+    }
+    header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding-bottom: 10px;
+      border-bottom: 1px solid #334155;
+      gap: 8px;
+    }
+    .clock {
+      font-size: 1.5rem;
+      font-weight: 700;
+      font-variant-numeric: tabular-nums;
+      color: var(--accent);
+    }
+    .header-actions {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+    }
+    .btn-sm {
+      background: var(--surface);
+      color: var(--text);
+      border: 1px solid #475569;
+      padding: 6px 10px;
+      border-radius: 6px;
+      font-size: 0.8rem;
+      text-decoration: none;
+      cursor: pointer;
+    }
+    .mode-selector {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 8px;
+      margin: 12px 0;
+    }
+    .mode-btn {
+      background: var(--surface);
+      color: var(--muted);
+      border: 2px solid transparent;
+      padding: 10px 4px;
+      border-radius: 8px;
+      font-size: 0.9rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+    .mode-btn.active {
+      color: var(--text);
+      border-color: var(--accent);
+      background: rgba(56, 189, 248, 0.15);
+    }
+    #reader-wrapper {
+      position: relative;
+      width: 100%;
+      max-width: 480px;
+      margin: 0 auto;
+      border-radius: 12px;
+      overflow: hidden;
+      background: #000;
+      border: 2px solid #334155;
+    }
+    #reader {
+      width: 100%;
+    }
+    .scan-guide {
+      text-align: center;
+      color: var(--muted);
+      font-size: 0.9rem;
+      margin-top: 10px;
+    }
+    #overlay {
+      position: fixed;
+      inset: 0;
+      display: none;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      padding: 24px;
+      text-align: center;
+      z-index: 100;
+      backdrop-filter: blur(6px);
+    }
+    #overlay.show { display: flex; }
+    #overlay.success { background: rgba(20, 83, 45, 0.94); }
+    #overlay.warning { background: rgba(120, 53, 15, 0.94); }
+    #overlay.error   { background: rgba(127, 29, 29, 0.94); }
+    #overlay.loading { background: rgba(15, 23, 42, 0.88); }
+
+    .badge {
+      font-size: 1.4rem;
+      font-weight: 800;
+      padding: 6px 20px;
+      border-radius: 999px;
+      background: rgba(255,255,255,0.2);
+      margin-bottom: 16px;
+    }
+    .emp-name {
+      font-size: 2.2rem;
+      font-weight: 800;
+      margin-bottom: 8px;
+    }
+    .detail-msg {
+      font-size: 1.2rem;
+      line-height: 1.6;
+      opacity: 0.95;
+    }
+  </style>
+</head>
+<body>
+
+  <header>
+    <div>
+      <div id="date-display" style="font-size: 0.8rem; color: var(--muted);">----/--/--</div>
+      <div id="clock-display" class="clock">00:00:00</div>
+    </div>
+    <div class="header-actions">
+      <a href="./cards.html" class="btn-sm">社員証QR印刷</a>
+      <button id="switch-cam-btn" class="btn-sm" onclick="switchCamera()">カメラ切替</button>
+    </div>
+  </header>
+
+  <div class="mode-selector">
+    <button class="mode-btn active" data-mode="AUTO" onclick="setMode(this)">自動 (出勤/退勤)</button>
+    <button class="mode-btn" data-mode="BREAK_START" onclick="setMode(this)">休憩開始</button>
+    <button class="mode-btn" data-mode="BREAK_END" onclick="setMode(this)">休憩終了</button>
+  </div>
+
+  <div id="reader-wrapper">
+    <div id="reader"></div>
+  </div>
+  <p class="scan-guide">QRコード（従業員ID）をカメラ枠内にかざしてください</p>
+
+  <div id="overlay">
+    <div id="overlay-badge" class="badge">処理中</div>
+    <div id="overlay-name" class="emp-name"></div>
+    <div id="overlay-msg" class="detail-msg"></div>
+  </div>
+
+  <script>
+    // GASウェブアプリのデプロイURLを設定してください
+    const GAS_WEBAPP_URL = 'https://script.google.com/macros/s/あなたのデプロイID/exec';
+
+    let currentMode = 'AUTO';
+    let isProcessing = false;
+    let html5QrCode = null;
+    let facingMode = 'environment';
+
+    function updateClock() {
+      const now = new Date();
+      document.getElementById('date-display').textContent =
+        now.toLocaleDateString('ja-JP', { year: 'numeric', month: '2-digit', day: '2-digit', weekday: 'short' });
+      document.getElementById('clock-display').textContent =
+        now.toLocaleTimeString('ja-JP', { hour12: false });
+    }
+    setInterval(updateClock, 1000);
+    updateClock();
+
+    function setMode(btn) {
+      document.querySelectorAll('.mode-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      currentMode = btn.dataset.mode;
+    }
+
+    function playTone(type) {
+      try {
+        const ctx = new (window.AudioContext || window.webkitAudioContext)();
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+
+        if (type === 'success') {
+          osc.type = 'sine';
+          osc.frequency.setValueAtTime(880, ctx.currentTime);
+          osc.frequency.setValueAtTime(1174.66, ctx.currentTime + 0.1);
+          gain.gain.setValueAtTime(0.3, ctx.currentTime);
+          osc.start();
+          osc.stop(ctx.currentTime + 0.25);
+        } else {
+          osc.type = 'sawtooth';
+          osc.frequency.setValueAtTime(220, ctx.currentTime);
+          gain.gain.setValueAtTime(0.3, ctx.currentTime);
+          osc.start();
+          osc.stop(ctx.currentTime + 0.35);
+        }
+      } catch (e) {}
+    }
+
+    function showOverlay(statusClass, badgeText, nameText, msgText, autoHideMs = 0) {
+      const overlay = document.getElementById('overlay');
+      overlay.className = 'show ' + statusClass;
+      document.getElementById('overlay-badge').textContent = badgeText;
+      document.getElementById('overlay-name').textContent = nameText;
+      document.getElementById('overlay-msg').innerHTML = msgText;
+
+      if (autoHideMs > 0) {
+        setTimeout(() => {
+          overlay.className = '';
+          if (currentMode !== 'AUTO') {
+            document.querySelector('.mode-btn[data-mode="AUTO"]').click();
+          }
+          isProcessing = false;
+        }, autoHideMs);
+      }
+    }
+
+    async function callGasApi(payload) {
+      const response = await fetch(GAS_WEBAPP_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+        body: JSON.stringify(payload)
+      });
+      if (!response.ok) {
+        throw new Error('HTTPエラー: ' + response.status);
+      }
+      return await response.json();
+    }
+
+    async function onScanSuccess(decodedText) {
+      if (isProcessing) return;
+      isProcessing = true;
+
+      showOverlay('loading', '確認中...', decodedText, '打刻データを記録しています');
+
+      const deviceInfo = navigator.userAgent.includes('iPhone') ? 'iPhone' :
+                         navigator.userAgent.includes('iPad') ? 'iPad' :
+                         navigator.userAgent.includes('Android') ? 'Android' : 'PCブラウザ';
+
+      try {
+        const res = await callGasApi({
+          action: 'recordAttendance',
+          empId: decodedText,
+          mode: currentMode,
+          deviceName: deviceInfo
+        });
+
+        if (res.success) {
+          playTone('success');
+          let detailHtml = `${res.time} に記録しました`;
+          if (res.stampType === '休憩終了' && res.breakMinutes !== null && res.breakMinutes !== undefined) {
+            detailHtml += `<br>本日の合計休憩時間：<strong>${res.breakMinutes}分</strong>`;
+          }
+          showOverlay(
+            'success',
+            res.stampType + ' 完了',
+            res.employeeName + ' さん',
+            detailHtml,
+            2800
+          );
+        } else if (res.isDuplicate) {
+          playTone('error');
+          showOverlay('warning', '連続打刻防止', '', res.message, 2500);
+        } else {
+          playTone('error');
+          showOverlay('error', 'エラー', '', res.message, 3000);
+        }
+      } catch (err) {
+        playTone('error');
+        showOverlay('error', '通信エラー', '', err.message, 3000);
+      }
+    }
+
+    function startScanner() {
+      html5QrCode = new Html5QrCode('reader');
+      const config = {
+        fps: 10,
+        qrbox: { width: 240, height: 240 },
+        aspectRatio: 1.0
+      };
+
+      html5QrCode.start({ facingMode: facingMode }, config, onScanSuccess)
+        .catch(err => {
+          showOverlay('error', 'カメラ起動エラー', '', 'カメラへのアクセスを許可してください: ' + err);
+        });
+    }
+
+    function switchCamera() {
+      if (!html5QrCode) return;
+      html5QrCode.stop().then(() => {
+        facingMode = (facingMode === 'environment') ? 'user' : 'environment';
+        startScanner();
+      });
+    }
+
+    window.addEventListener('load', startScanner);
+  </script>
+</body>
+</html>
