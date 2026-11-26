@@ -126,9 +126,10 @@
       margin-bottom: 8px;
     }
     .detail-msg {
-      font-size: 1.2rem;
+      font-size: 1.05rem;
       line-height: 1.6;
       opacity: 0.95;
+      word-break: break-word;
     }
   </style>
 </head>
@@ -232,6 +233,13 @@
       }
     }
 
+    function formatCameraError(err) {
+      if (!err) return '不明なカメラエラー';
+      const name = err.name ? `[${err.name}] ` : '';
+      const msg = err.message ? err.message : String(err);
+      return name + msg;
+    }
+
     async function callGasApi(payload) {
       const response = await fetch(GAS_WEBAPP_URL, {
         method: 'POST',
@@ -290,6 +298,11 @@
 
     async function startScanner() {
       try {
+        if (!window.isSecureContext) {
+          showOverlay('error', 'カメラ起動エラー', '', 'HTTPS環境で開いてください。', 4000);
+          return;
+        }
+
         if (!html5QrCode) {
           html5QrCode = new Html5QrCode('reader');
         }
@@ -300,23 +313,37 @@
           aspectRatio: 1.0
         };
 
-        const cameras = await Html5Qrcode.getCameras();
-        if (cameras && cameras.length > 0) {
-          const target = cameras.find(cam => {
-            const label = (cam.label || '').toLowerCase();
-            if (facingMode === 'environment') {
-              return /back|rear|environment|背面|外/.test(label);
-            }
-            return /front|user|face|前面|内/.test(label);
-          }) || cameras.find(cam => cam.id !== currentCameraId) || cameras[0];
-
-          currentCameraId = target.id;
-          await html5QrCode.start(currentCameraId, config, onScanSuccess);
-        } else {
+        // 1. まず facingMode で起動を試行
+        try {
           await html5QrCode.start({ facingMode: facingMode }, config, onScanSuccess);
+          currentCameraId = null;
+          return;
+        } catch (facingErr) {
+          // 2. 失敗時は利用可能なカメラ一覧から別IDへフォールバック
+          const cameras = await Html5Qrcode.getCameras();
+          if (!cameras || cameras.length === 0) {
+            throw facingErr;
+          }
+
+          const orderedCameras = [
+            ...cameras.filter(c => c.id !== currentCameraId),
+            ...cameras.filter(c => c.id === currentCameraId)
+          ];
+
+          let lastErr = facingErr;
+          for (const cam of orderedCameras) {
+            try {
+              await html5QrCode.start(cam.id, config, onScanSuccess);
+              currentCameraId = cam.id;
+              return;
+            } catch (camErr) {
+              lastErr = camErr;
+            }
+          }
+          throw lastErr;
         }
       } catch (err) {
-        showOverlay('error', 'カメラ起動エラー', '', 'カメラへのアクセスを確認してください: ' + err, 3000);
+        showOverlay('error', 'カメラ起動エラー', '', formatCameraError(err), 4500);
       }
     }
 
@@ -328,13 +355,14 @@
         if (html5QrCode.isScanning) {
           await html5QrCode.stop();
         }
+      } catch (e) {}
+
+      try {
         await html5QrCode.clear();
-      } catch (e) {
-        // 停止済み・未開始時のエラーは無視して再起動へ進む
-      }
+      } catch (e) {}
 
       facingMode = (facingMode === 'environment') ? 'user' : 'environment';
-      await new Promise(resolve => setTimeout(resolve, 250));
+      await new Promise(resolve => setTimeout(resolve, 600));
       await startScanner();
       isSwitchingCamera = false;
     }
