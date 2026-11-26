@@ -170,10 +170,17 @@
 
     function normalizeEmployeeList(res) {
       if (Array.isArray(res)) return res;
-      if (res && Array.isArray(res.employees)) return res.employees;
-      if (res && Array.isArray(res.data)) return res.data;
-      if (res && Array.isArray(res.list)) return res.list;
-      if (res && res.data && Array.isArray(res.data.employees)) return res.data.employees;
+      if (!res || typeof res !== 'object') return null;
+
+      const candidateKeys = ['employees', 'data', 'list', 'items', 'rows', 'records', 'result'];
+      for (const k of candidateKeys) {
+        if (Array.isArray(res[k])) return res[k];
+      }
+      if (res.data && typeof res.data === 'object') {
+        for (const k of candidateKeys) {
+          if (Array.isArray(res.data[k])) return res.data[k];
+        }
+      }
       return null;
     }
 
@@ -191,7 +198,7 @@
       try {
         json = JSON.parse(rawText);
       } catch (e) {
-        throw new Error(`JSON解析失敗 (${actionName}): ${rawText.slice(0, 180)}`);
+        throw new Error(`JSON解析失敗: ${rawText.slice(0, 180)}`);
       }
       return { json, rawText };
     }
@@ -259,13 +266,13 @@
       document.getElementById('cards-grid').innerHTML = '';
 
       const actionsToTry = ['getEmployees', 'getEmployeeList', 'listEmployees'];
-      let lastErrorMsg = '';
+      const details = [];
 
       for (const act of actionsToTry) {
         try {
           const { json, rawText } = await postAction(act);
           if (json && json.success === false) {
-            lastErrorMsg = `${act}: ${json.message || 'GAS側でエラーが返されました'}`;
+            details.push(`${act}: ${json.message || 'success:false'}`);
             continue;
           }
           const list = normalizeEmployeeList(json);
@@ -273,13 +280,13 @@
             renderCards(list);
             return;
           }
-          lastErrorMsg = `${act}: 想定外のJSON構造 -> ${rawText.slice(0, 180)}`;
+          details.push(`${act}: 配列なし (${rawText.slice(0, 120)})`);
         } catch (err) {
-          lastErrorMsg = `${act}: ${err.message}`;
+          details.push(`${act}: ${err.message}`);
         }
       }
 
-      setStatus(`読み込みエラー: ${lastErrorMsg || '従業員データを取得できませんでした。'}`, true);
+      setStatus(`読み込みエラー: ${details.join(' / ')}`, true);
     }
 
     window.addEventListener('load', loadEmployees);
