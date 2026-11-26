@@ -160,8 +160,7 @@
   <div id="cards-grid" class="cards-grid"></div>
 
   <script>
-    // index.html と同じ GASウェブアプリのデプロイURLを設定してください
-    const GAS_WEBAPP_URL = 'https://script.google.com/macros/s/あなたのデプロイID/exec';
+    const GAS_WEBAPP_URL = 'https://script.google.com/macros/s/AKfycbxXYd9al_H105tYO7RMG78hMoN27SQbEOaGy6vdst5IAUS0dhsHlx-3YdVPlMUIwGFy/exec';
 
     function setStatus(message, isError = false) {
       const box = document.getElementById('status-box');
@@ -173,8 +172,28 @@
       if (Array.isArray(res)) return res;
       if (res && Array.isArray(res.employees)) return res.employees;
       if (res && Array.isArray(res.data)) return res.data;
+      if (res && Array.isArray(res.list)) return res.list;
       if (res && res.data && Array.isArray(res.data.employees)) return res.data.employees;
       return null;
+    }
+
+    async function postAction(actionName) {
+      const response = await fetch(GAS_WEBAPP_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+        body: JSON.stringify({ action: actionName })
+      });
+      if (!response.ok) {
+        throw new Error(`HTTPステータス ${response.status} が返されました。`);
+      }
+      const rawText = await response.text();
+      let json;
+      try {
+        json = JSON.parse(rawText);
+      } catch (e) {
+        throw new Error(`JSON解析失敗 (${actionName}): ${rawText.slice(0, 180)}`);
+      }
+      return { json, rawText };
     }
 
     function renderCards(employees) {
@@ -239,42 +258,28 @@
       setStatus('従業員データを読み込んでいます...');
       document.getElementById('cards-grid').innerHTML = '';
 
-      try {
-        if (!GAS_WEBAPP_URL || GAS_WEBAPP_URL.includes('あなたのデプロイID')) {
-          throw new Error('GAS_WEBAPP_URL が未設定です。');
-        }
+      const actionsToTry = ['getEmployees', 'getEmployeeList', 'listEmployees'];
+      let lastErrorMsg = '';
 
-        const response = await fetch(GAS_WEBAPP_URL, {
-          method: 'POST',
-          headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-          body: JSON.stringify({ action: 'getEmployees' })
-        });
-
-        if (!response.ok) {
-          throw new Error(`HTTPステータス ${response.status} が返されました。`);
-        }
-
-        const rawText = await response.text();
-        let res;
+      for (const act of actionsToTry) {
         try {
-          res = JSON.parse(rawText);
-        } catch (e) {
-          throw new Error(`JSON解析に失敗しました: ${rawText.slice(0, 200)}`);
+          const { json, rawText } = await postAction(act);
+          if (json && json.success === false) {
+            lastErrorMsg = `${act}: ${json.message || 'GAS側でエラーが返されました'}`;
+            continue;
+          }
+          const list = normalizeEmployeeList(json);
+          if (list) {
+            renderCards(list);
+            return;
+          }
+          lastErrorMsg = `${act}: 想定外のJSON構造 -> ${rawText.slice(0, 180)}`;
+        } catch (err) {
+          lastErrorMsg = `${act}: ${err.message}`;
         }
-
-        if (res && res.success === false) {
-          throw new Error(res.message || 'GAS側でエラーが返されました。');
-        }
-
-        const list = normalizeEmployeeList(res);
-        if (!list) {
-          throw new Error(`想定外のレスポンス形式です: ${rawText.slice(0, 200)}`);
-        }
-
-        renderCards(list);
-      } catch (err) {
-        setStatus(`読み込みエラー: ${err.message}`, true);
       }
+
+      setStatus(`読み込みエラー: ${lastErrorMsg || '従業員データを取得できませんでした。'}`, true);
     }
 
     window.addEventListener('load', loadEmployees);
