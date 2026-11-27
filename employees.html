@@ -114,6 +114,12 @@
       outline: none;
       border-color: var(--accent);
     }
+    input[readonly] {
+      background: rgba(15, 23, 42, 0.65);
+      color: #cbd5e1;
+      border-style: dashed;
+      cursor: not-allowed;
+    }
     .search-input {
       min-width: 220px;
       flex: 1;
@@ -204,7 +210,7 @@
     .modal-backdrop.show { display: flex; }
     .modal {
       width: 100%;
-      max-width: 520px;
+      max-width: 540px;
       background: var(--surface);
       border: 1px solid #475569;
       border-radius: 12px;
@@ -245,8 +251,52 @@
     .id-row {
       display: flex;
       gap: 6px;
+      align-items: center;
     }
     .id-row input { flex: 1; }
+    .qr-preview-box {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      background: var(--surface-2);
+      border: 1px dashed #475569;
+      border-radius: 10px;
+      padding: 12px;
+    }
+    .qr-preview-box img {
+      width: 112px;
+      height: 112px;
+      background: #ffffff;
+      padding: 6px;
+      border-radius: 8px;
+      flex-shrink: 0;
+      object-fit: contain;
+    }
+    .qr-placeholder {
+      width: 112px;
+      height: 112px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      font-size: 0.75rem;
+      color: var(--muted);
+      background: rgba(15, 23, 42, 0.8);
+      border-radius: 8px;
+      padding: 8px;
+      flex-shrink: 0;
+    }
+    .qr-meta {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      min-width: 0;
+      flex: 1;
+    }
+    .qr-url-readonly {
+      font-size: 0.78rem;
+      width: 100%;
+    }
     .modal-footer {
       display: flex;
       justify-content: flex-end;
@@ -257,6 +307,7 @@
     }
     @media (max-width: 600px) {
       .form-grid { grid-template-columns: 1fr; }
+      .qr-preview-box { flex-direction: column; align-items: flex-start; }
     }
   </style>
 </head>
@@ -319,10 +370,10 @@
       <form id="emp-form" onsubmit="handleSave(event)">
         <div class="form-grid">
           <div class="form-field">
-            <label for="f-id">従業員ID（空欄なら8桁自動生成）</label>
+            <label for="f-id">従業員ID（手動入力不可・自動発番）</label>
             <div class="id-row">
-              <input id="f-id" type="text" placeholder="例: N1l2V1xx">
-              <button type="button" id="gen-id-btn" class="btn btn-sm" onclick="fillRandomId()">自動生成</button>
+              <input id="f-id" type="text" readonly tabindex="-1" placeholder="自動生成されます">
+              <button type="button" id="gen-id-btn" class="btn btn-sm" onclick="fillRandomId()">IDを発行</button>
             </div>
           </div>
 
@@ -362,8 +413,15 @@
           </div>
 
           <div class="form-field full">
-            <label for="f-qrurl">QR画像URL（空欄ならIDから自動生成）</label>
-            <input id="f-qrurl" type="url" placeholder="https://...">
+            <label>QRコード表示（手動入力不可・IDから自動生成）</label>
+            <div class="qr-preview-box">
+              <img id="f-qr-img" src="" alt="従業員QRコード" style="display:none;">
+              <div id="f-qr-empty" class="qr-placeholder">ID発行後に<br>QRを表示</div>
+              <div class="qr-meta">
+                <span style="font-size: 0.78rem; color: var(--muted);">QR画像URL（読み取り専用）</span>
+                <input id="f-qrurl" class="qr-url-readonly" type="text" readonly tabindex="-1" placeholder="ID確定後に自動生成されます">
+              </div>
+            </div>
           </div>
 
           <div class="form-field full">
@@ -408,22 +466,47 @@
 
     function generateRandomId8() {
       const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+      const existingSet = new Set(employees.map(e => e.id));
       while (true) {
         let id = '';
         for (let i = 0; i < 8; i++) {
           id += chars.charAt(Math.floor(Math.random() * chars.length));
         }
-        if (!/^[0-9]+$/.test(id)) return id;
+        if (!/^[0-9]+$/.test(id) && !existingSet.has(id)) return id;
+      }
+    }
+
+    function buildQrImageUrl(empId) {
+      const cleanId = String(empId || '').trim();
+      if (!cleanId) return '';
+      return `https://quickchart.io/qr?text=${encodeURIComponent(cleanId)}&size=240`;
+    }
+
+    function updateQrDisplay(empId, explicitQrUrl = '') {
+      const cleanId = String(empId || '').trim();
+      const qrUrl = cleanId ? (String(explicitQrUrl || '').trim() || buildQrImageUrl(cleanId)) : '';
+      const imgEl = document.getElementById('f-qr-img');
+      const emptyEl = document.getElementById('f-qr-empty');
+      const urlInput = document.getElementById('f-qrurl');
+
+      urlInput.value = qrUrl;
+
+      if (qrUrl) {
+        imgEl.src = qrUrl;
+        imgEl.style.display = 'block';
+        emptyEl.style.display = 'none';
+      } else {
+        imgEl.removeAttribute('src');
+        imgEl.style.display = 'none';
+        emptyEl.style.display = 'flex';
       }
     }
 
     function fillRandomId() {
       const idInput = document.getElementById('f-id');
-      idInput.value = generateRandomId8();
-      const qrInput = document.getElementById('f-qrurl');
-      if (!qrInput.value.trim()) {
-        qrInput.value = `https://quickchart.io/qr?text=${encodeURIComponent(idInput.value)}&size=240`;
-      }
+      const newId = generateRandomId8();
+      idInput.value = newId;
+      updateQrDisplay(newId);
     }
 
     async function postApi(payload) {
@@ -501,16 +584,16 @@
     function openCreateModal() {
       editingId = null;
       document.getElementById('modal-title').textContent = '従業員の新規登録';
+      const initialId = generateRandomId8();
       const idInput = document.getElementById('f-id');
-      idInput.value = '';
-      idInput.disabled = false;
+      idInput.value = initialId;
       document.getElementById('gen-id-btn').style.display = 'inline-block';
       document.getElementById('f-name').value = '';
       document.getElementById('f-kana').value = '';
       document.getElementById('f-dept').value = '';
       document.getElementById('f-emptype').value = '正社員';
       document.getElementById('f-status').value = '在籍';
-      document.getElementById('f-qrurl').value = '';
+      updateQrDisplay(initialId);
       document.getElementById('f-note').value = '';
       document.getElementById('emp-modal').classList.add('show');
       document.getElementById('f-name').focus();
@@ -523,14 +606,13 @@
       document.getElementById('modal-title').textContent = `従業員の編集（${emp.id}）`;
       const idInput = document.getElementById('f-id');
       idInput.value = emp.id;
-      idInput.disabled = true;
       document.getElementById('gen-id-btn').style.display = 'none';
       document.getElementById('f-name').value = emp.name;
       document.getElementById('f-kana').value = emp.kana;
       document.getElementById('f-dept').value = emp.dept;
       document.getElementById('f-emptype').value = emp.empType || '';
       document.getElementById('f-status').value = emp.status || '在籍';
-      document.getElementById('f-qrurl').value = emp.qrUrl || '';
+      updateQrDisplay(emp.id, emp.qrUrl);
       document.getElementById('f-note').value = emp.note || '';
       document.getElementById('emp-modal').classList.add('show');
       document.getElementById('f-name').focus();
@@ -544,15 +626,19 @@
       event.preventDefault();
       const saveBtn = document.getElementById('save-btn');
       const isNew = (editingId === null);
+      const resolvedId = isNew
+        ? (document.getElementById('f-id').value.trim() || generateRandomId8())
+        : editingId;
+      const resolvedQrUrl = buildQrImageUrl(resolvedId);
 
       const payloadEmp = {
-        id: isNew ? document.getElementById('f-id').value.trim() : editingId,
+        id: resolvedId,
         name: document.getElementById('f-name').value.trim(),
         kana: document.getElementById('f-kana').value.trim(),
         dept: document.getElementById('f-dept').value.trim(),
         empType: document.getElementById('f-emptype').value,
         status: document.getElementById('f-status').value,
-        qrUrl: document.getElementById('f-qrurl').value.trim(),
+        qrUrl: resolvedQrUrl,
         note: document.getElementById('f-note').value.trim()
       };
 
