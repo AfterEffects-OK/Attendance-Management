@@ -227,11 +227,12 @@
     ];
     let qrCdnIndex = 0;
 
-    // 読取後処理の体感短縮設定
+    // 読取後処理の体感短縮設定（約0.85秒で次へ進める目安）
+    const FAST_COMPLETE_MS = 850;
     const SUCCESS_OVERLAY_MS = 700;
-    const WARNING_OVERLAY_MS = 900;
-    const ERROR_OVERLAY_MS = 1400;
-    const SAME_ID_COOLDOWN_MS = 2000;
+    const WARNING_OVERLAY_MS = 1200;
+    const ERROR_OVERLAY_MS = 1800;
+    const SAME_ID_COOLDOWN_MS = 2500;
     const API_TIMEOUT_MS = 6000;
     const MAX_RECENT_LOGS = 5;
 
@@ -412,6 +413,20 @@
       return name + msg;
     }
 
+    function formatNowTimeJst() {
+      return new Date().toLocaleTimeString('ja-JP', { hour12: false });
+    }
+
+    function guessStampTypeFast(empId, mode) {
+      if (mode === 'BREAK_START') return '休憩開始';
+      if (mode === 'BREAK_END') return '休憩終了';
+      const todayKey = `ATT_STATE_${empId}_${new Date().toISOString().slice(0, 10)}`;
+      const prev = sessionStorage.getItem(todayKey);
+      const next = (prev === '出勤') ? '退勤' : '出勤';
+      sessionStorage.setItem(todayKey, next);
+      return next;
+    }
+
     async function callGasApi(payload) {
       const controller = new AbortController();
       const timerId = setTimeout(() => controller.abort(), API_TIMEOUT_MS);
@@ -446,51 +461,55 @@
       lastScannedId = normalizedId;
       lastScannedAt = nowMs;
 
-      // 400ms以上かかった場合のみ「記録中」を表示してチラつき・待ち時間感を軽減
-      const loadingTimer = setTimeout(() => {
-        if (isProcessing) {
-          showOverlay('loading', '送信中...', normalizedId, '記録しています');
-        }
-      }, 400);
+      const stampTime = formatNowTimeJst();
+      const optimisticType = guessStampTypeFast(normalizedId, currentMode);
+      const requestMode = currentMode;
 
-      try {
-        const res = await callGasApi({
-          action: 'recordAttendance',
-          empId: normalizedId,
-          mode: currentMode,
-          deviceName: DEVICE_LABEL
-        });
-        clearTimeout(loadingTimer);
+      // 通信完了を待たずに約0.85秒で完了演出へ進め、次の打刻を素早く受け付ける
+      playTone('success');
+      showOverlay(
+        'success',
+        optimisticType + ' 受付',
+        normalizedId,
+        `${stampTime} 記録処理中...`,
+        FAST_COMPLETE_MS
+      );
 
-        if (res.success) {
-          playTone('success');
-          pushRecentLog(res.employeeName || normalizedId, res.stampType || '打刻', res.time || '');
-          let detailHtml = `${res.time} に記録しました`;
-          if (res.stampType === '休憩終了' && res.breakMinutes !== null && res.breakMinutes !== undefined) {
-            detailHtml += `<br>本日の合計休憩時間：<strong>${res.breakMinutes}分</strong>`;
+      // 裏側でGASへ記録送信し、確定結果・休憩合計・警告・エラーを反映する
+      callGasApi({
+        action: 'recordAttendance',
+        empId: normalizedId,
+        mode: requestMode,
+        deviceName: DEVICE_LABEL
+      }).then((res) => {
+        if (res && res.success) {
+          const confirmedName = res.employeeName || normalizedId;
+          const confirmedType = res.stampType || optimisticType;
+          const confirmedTime = res.time || stampTime;
+          pushRecentLog(confirmedName, confirmedType, confirmedTime);
+          if (confirmedType === '休憩終了' && res.breakMinutes !== null && res.breakMinutes !== undefined) {
+            showOverlay(
+              'success',
+              confirmedType + ' 完了',
+              confirmedName + ' さん',
+              `${confirmedTime} に記録しました<br>本日の合計休憩時間：<strong>${res.breakMinutes}分</strong>`,
+              SUCCESS_OVERLAY_MS
+            );
           }
-          showOverlay(
-            'success',
-            res.stampType + ' 完了',
-            (res.employeeName || normalizedId) + ' さん',
-            detailHtml,
-            SUCCESS_OVERLAY_MS
-          );
-        } else if (res.isDuplicate) {
+        } else if (res && res.isDuplicate) {
           playTone('error');
           showOverlay('warning', '連続打刻防止', '', res.message, WARNING_OVERLAY_MS);
         } else {
           playTone('error');
-          showOverlay('error', 'エラー', '', res.message, ERROR_OVERLAY_MS);
+          showOverlay('error', '記録エラー', '', (res && res.message) || '記録に失敗しました', ERROR_OVERLAY_MS);
         }
-      } catch (err) {
-        clearTimeout(loadingTimer);
+      }).catch((err) => {
         playTone('error');
         const msg = err && err.name === 'AbortError'
           ? '通信がタイムアウトしました。電波状況をご確認ください。'
           : formatCameraError(err);
         showOverlay('error', '通信エラー', '', msg, ERROR_OVERLAY_MS);
-      }
+      });
     }
 
     async function startScanner() {
