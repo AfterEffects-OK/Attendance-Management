@@ -248,12 +248,6 @@
       color: var(--muted);
       font-weight: 600;
     }
-    .id-row {
-      display: flex;
-      gap: 6px;
-      align-items: center;
-    }
-    .id-row input { flex: 1; }
     .qr-preview-box {
       display: flex;
       align-items: center;
@@ -371,10 +365,7 @@
         <div class="form-grid">
           <div class="form-field">
             <label for="f-id">従業員ID</label>
-            <div class="id-row">
-              <input id="f-id" type="text" readonly tabindex="-1" placeholder="自動生成されます">
-              <button type="button" id="gen-id-btn" class="btn btn-sm" onclick="fillRandomId()">IDを発行</button>
-            </div>
+            <input id="f-id" type="text" readonly tabindex="-1" placeholder="自動生成されます">
           </div>
 
           <div class="form-field">
@@ -502,13 +493,6 @@
       }
     }
 
-    function fillRandomId() {
-      const idInput = document.getElementById('f-id');
-      const newId = generateRandomId8();
-      idInput.value = newId;
-      updateQrDisplay(newId);
-    }
-
     async function postApi(payload) {
       const res = await fetch(GAS_WEBAPP_URL, {
         method: 'POST',
@@ -585,9 +569,7 @@
       editingId = null;
       document.getElementById('modal-title').textContent = '従業員の新規登録';
       const initialId = generateRandomId8();
-      const idInput = document.getElementById('f-id');
-      idInput.value = initialId;
-      document.getElementById('gen-id-btn').style.display = 'inline-block';
+      document.getElementById('f-id').value = initialId;
       document.getElementById('f-name').value = '';
       document.getElementById('f-kana').value = '';
       document.getElementById('f-dept').value = '';
@@ -604,9 +586,7 @@
       if (!emp) return;
       editingId = emp.id;
       document.getElementById('modal-title').textContent = `従業員の編集（${emp.id}）`;
-      const idInput = document.getElementById('f-id');
-      idInput.value = emp.id;
-      document.getElementById('gen-id-btn').style.display = 'none';
+      document.getElementById('f-id').value = emp.id;
       document.getElementById('f-name').value = emp.name;
       document.getElementById('f-kana').value = emp.kana;
       document.getElementById('f-dept').value = emp.dept;
