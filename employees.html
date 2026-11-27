@@ -1,0 +1,609 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>従業員マスタ管理</title>
+  <style>
+    :root {
+      --bg: #0f172a;
+      --surface: #1e293b;
+      --surface-2: #0b1120;
+      --text: #f8fafc;
+      --muted: #94a3b8;
+      --accent: #38bdf8;
+      --danger: #ef4444;
+      --success: #22c55e;
+      --border: #334155;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Hiragino Kaku Gothic ProN", sans-serif;
+      padding: 16px;
+      min-height: 100vh;
+    }
+    .container {
+      max-width: 1120px;
+      margin: 0 auto;
+    }
+    header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 12px;
+      padding-bottom: 14px;
+      border-bottom: 1px solid var(--border);
+      margin-bottom: 16px;
+    }
+    h1 {
+      font-size: 1.35rem;
+      font-weight: 700;
+    }
+    .sub-link {
+      color: var(--muted);
+      font-size: 0.82rem;
+      text-decoration: none;
+    }
+    .sub-link:hover { color: var(--accent); }
+    .nav-actions {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      align-items: center;
+    }
+    .btn {
+      background: var(--surface);
+      color: var(--text);
+      border: 1px solid #475569;
+      padding: 8px 12px;
+      border-radius: 8px;
+      font-size: 0.85rem;
+      font-weight: 600;
+      text-decoration: none;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+    .btn:hover { border-color: var(--accent); }
+    .btn-primary {
+      background: var(--accent);
+      color: #062033;
+      border-color: var(--accent);
+    }
+    .btn-danger {
+      background: rgba(239, 68, 68, 0.15);
+      color: #fca5a5;
+      border-color: rgba(239, 68, 68, 0.5);
+    }
+    .btn-sm {
+      padding: 5px 9px;
+      font-size: 0.78rem;
+      border-radius: 6px;
+    }
+    .toolbar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 10px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      padding: 12px;
+      border-radius: 10px;
+      margin-bottom: 14px;
+    }
+    .filter-group {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      align-items: center;
+      flex: 1;
+    }
+    input, select, textarea {
+      background: var(--surface-2);
+      color: var(--text);
+      border: 1px solid #475569;
+      border-radius: 7px;
+      padding: 8px 10px;
+      font-size: 0.88rem;
+      font-family: inherit;
+    }
+    input:focus, select:focus, textarea:focus {
+      outline: none;
+      border-color: var(--accent);
+    }
+    .search-input {
+      min-width: 220px;
+      flex: 1;
+      max-width: 360px;
+    }
+    .count-label {
+      color: var(--muted);
+      font-size: 0.85rem;
+    }
+    .table-wrap {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      overflow-x: auto;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.86rem;
+    }
+    th, td {
+      padding: 10px 10px;
+      text-align: left;
+      border-bottom: 1px solid #293548;
+      vertical-align: middle;
+    }
+    th {
+      background: rgba(15, 23, 42, 0.75);
+      color: var(--muted);
+      font-size: 0.78rem;
+      font-weight: 700;
+      white-space: nowrap;
+    }
+    tr:last-child td { border-bottom: none; }
+    .status-badge {
+      display: inline-block;
+      padding: 2px 8px;
+      border-radius: 999px;
+      font-size: 0.75rem;
+      font-weight: 700;
+    }
+    .status-active {
+      background: rgba(34, 197, 94, 0.18);
+      color: #86efac;
+    }
+    .status-inactive {
+      background: rgba(148, 163, 184, 0.2);
+      color: #cbd5e1;
+    }
+    .row-actions {
+      display: flex;
+      gap: 6px;
+      white-space: nowrap;
+    }
+    .empty-cell {
+      text-align: center;
+      color: var(--muted);
+      padding: 28px 12px;
+    }
+    .toast {
+      position: fixed;
+      right: 16px;
+      bottom: 16px;
+      background: var(--surface);
+      border: 1px solid var(--accent);
+      color: var(--text);
+      padding: 10px 14px;
+      border-radius: 8px;
+      font-size: 0.86rem;
+      box-shadow: 0 10px 25px rgba(0, 0, 0, 0.45);
+      display: none;
+      z-index: 200;
+    }
+    .toast.show { display: block; }
+    .toast.error { border-color: var(--danger); color: #fecaca; }
+
+    /* モーダル */
+    .modal-backdrop {
+      position: fixed;
+      inset: 0;
+      background: rgba(2, 6, 23, 0.78);
+      display: none;
+      justify-content: center;
+      align-items: center;
+      padding: 16px;
+      z-index: 150;
+    }
+    .modal-backdrop.show { display: flex; }
+    .modal {
+      width: 100%;
+      max-width: 520px;
+      background: var(--surface);
+      border: 1px solid #475569;
+      border-radius: 12px;
+      padding: 18px;
+      max-height: 92vh;
+      overflow-y: auto;
+    }
+    .modal-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 14px;
+      padding-bottom: 10px;
+      border-bottom: 1px solid var(--border);
+    }
+    .modal-title {
+      font-size: 1.05rem;
+      font-weight: 700;
+    }
+    .form-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+    }
+    .form-field {
+      display: flex;
+      flex-direction: column;
+      gap: 5px;
+    }
+    .form-field.full {
+      grid-column: 1 / -1;
+    }
+    label {
+      font-size: 0.78rem;
+      color: var(--muted);
+      font-weight: 600;
+    }
+    .id-row {
+      display: flex;
+      gap: 6px;
+    }
+    .id-row input { flex: 1; }
+    .modal-footer {
+      display: flex;
+      justify-content: flex-end;
+      gap: 8px;
+      margin-top: 16px;
+      padding-top: 12px;
+      border-top: 1px solid var(--border);
+    }
+    @media (max-width: 600px) {
+      .form-grid { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <div>
+        <h1>従業員マスタ管理</h1>
+        <a class="sub-link" href="https://docs.google.com/spreadsheets/d/1EKJHBP1E3dn4M2qQ8rIY0yY8PWF3D9uaLfZEIDlYq8A/edit?gid=0#gid=0" target="_blank" rel="noopener">スプレッドシート（従業員マスタ）を開く</a>
+      </div>
+      <div class="nav-actions">
+        <a href="./index.html" class="btn">打刻画面へ</a>
+        <a href="./card.html" class="btn">社員証QR印刷</a>
+        <button class="btn" onclick="loadEmployees()">再読み込み</button>
+        <button class="btn btn-primary" onclick="openCreateModal()">+ 新規登録</button>
+      </div>
+    </header>
+
+    <div class="toolbar">
+      <div class="filter-group">
+        <input id="search-input" class="search-input" type="text" placeholder="ID・氏名・フリガナ・部署で検索..." oninput="renderTable()">
+        <select id="status-filter" onchange="renderTable()">
+          <option value="ALL">すべてのステータス</option>
+          <option value="在籍">在籍</option>
+          <option value="休職">休職</option>
+          <option value="退職">退職</option>
+        </select>
+      </div>
+      <div id="count-label" class="count-label">読み込み中...</div>
+    </div>
+
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>従業員ID</th>
+            <th>氏名</th>
+            <th>フリガナ</th>
+            <th>現所属部署</th>
+            <th>雇用形態</th>
+            <th>在籍ステータス</th>
+            <th>備考</th>
+            <th>操作</th>
+          </tr>
+        </thead>
+        <tbody id="emp-tbody">
+          <tr><td colspan="8" class="empty-cell">データを読み込んでいます...</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- 新規登録 / 編集モーダル -->
+  <div id="emp-modal" class="modal-backdrop">
+    <div class="modal">
+      <div class="modal-header">
+        <div id="modal-title" class="modal-title">従業員の新規登録</div>
+        <button class="btn btn-sm" onclick="closeModal()">閉じる</button>
+      </div>
+      <form id="emp-form" onsubmit="handleSave(event)">
+        <div class="form-grid">
+          <div class="form-field">
+            <label for="f-id">従業員ID（空欄なら8桁自動生成）</label>
+            <div class="id-row">
+              <input id="f-id" type="text" placeholder="例: N1l2V1xx">
+              <button type="button" id="gen-id-btn" class="btn btn-sm" onclick="fillRandomId()">自動生成</button>
+            </div>
+          </div>
+
+          <div class="form-field">
+            <label for="f-status">在籍ステータス</label>
+            <select id="f-status">
+              <option value="在籍">在籍</option>
+              <option value="休職">休職</option>
+              <option value="退職">退職</option>
+            </select>
+          </div>
+
+          <div class="form-field">
+            <label for="f-name">氏名 *</label>
+            <input id="f-name" type="text" required placeholder="例: 山田 太郎">
+          </div>
+
+          <div class="form-field">
+            <label for="f-kana">フリガナ</label>
+            <input id="f-kana" type="text" placeholder="例: ヤマダ タロウ">
+          </div>
+
+          <div class="form-field">
+            <label for="f-dept">現所属部署</label>
+            <input id="f-dept" type="text" placeholder="例: 営業部">
+          </div>
+
+          <div class="form-field">
+            <label for="f-emptype">雇用形態</label>
+            <select id="f-emptype">
+              <option value="正社員">正社員</option>
+              <option value="契約社員">契約社員</option>
+              <option value="パート・アルバイト">パート・アルバイト</option>
+              <option value="業務委託">業務委託</option>
+              <option value="">未指定</option>
+            </select>
+          </div>
+
+          <div class="form-field full">
+            <label for="f-qrurl">QR画像URL（空欄ならIDから自動生成）</label>
+            <input id="f-qrurl" type="url" placeholder="https://...">
+          </div>
+
+          <div class="form-field full">
+            <label for="f-note">備考</label>
+            <textarea id="f-note" rows="2" placeholder="メモなど"></textarea>
+          </div>
+        </div>
+
+        <div class="modal-footer">
+          <button type="button" class="btn" onclick="closeModal()">キャンセル</button>
+          <button type="submit" id="save-btn" class="btn btn-primary">保存する</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <div id="toast" class="toast"></div>
+
+  <script>
+    const GAS_WEBAPP_URL = 'https://script.google.com/macros/s/AKfycbxXYd9al_H105tYO7RMG78hMoN27SQbEOaGy6vdst5IAUS0dhsHlx-3YdVPlMUIwGFy/exec';
+
+    let employees = [];
+    let editingId = null;
+
+    function showToast(msg, isError = false) {
+      const el = document.getElementById('toast');
+      el.textContent = msg;
+      el.className = 'toast show' + (isError ? ' error' : '');
+      clearTimeout(showToast._timer);
+      showToast._timer = setTimeout(() => {
+        el.className = 'toast';
+      }, 3000);
+    }
+
+    function escapeHtml(str) {
+      return String(str || '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
+    }
+
+    function generateRandomId8() {
+      const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+      while (true) {
+        let id = '';
+        for (let i = 0; i < 8; i++) {
+          id += chars.charAt(Math.floor(Math.random() * chars.length));
+        }
+        if (!/^[0-9]+$/.test(id)) return id;
+      }
+    }
+
+    function fillRandomId() {
+      const idInput = document.getElementById('f-id');
+      idInput.value = generateRandomId8();
+      const qrInput = document.getElementById('f-qrurl');
+      if (!qrInput.value.trim()) {
+        qrInput.value = `https://quickchart.io/qr?text=${encodeURIComponent(idInput.value)}&size=240`;
+      }
+    }
+
+    async function postApi(payload) {
+      const res = await fetch(GAS_WEBAPP_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+        body: JSON.stringify(payload)
+      });
+      if (!res.ok) throw new Error('HTTPエラー: ' + res.status);
+      return await res.json();
+    }
+
+    async function loadEmployees() {
+      const tbody = document.getElementById('emp-tbody');
+      const countEl = document.getElementById('count-label');
+      tbody.innerHTML = '<tr><td colspan="8" class="empty-cell">データを読み込んでいます...</td></tr>';
+      countEl.textContent = '読み込み中...';
+
+      try {
+        const data = await postApi({ action: 'getEmployeesMaster' });
+        if (!data.success) {
+          throw new Error(data.message || '取得に失敗しました');
+        }
+        employees = Array.isArray(data.employees) ? data.employees : [];
+        renderTable();
+      } catch (err) {
+        tbody.innerHTML = `<tr><td colspan="8" class="empty-cell">取得エラー: ${escapeHtml(err.message)}</td></tr>`;
+        countEl.textContent = '取得失敗';
+        showToast('従業員一覧の取得に失敗しました: ' + err.message, true);
+      }
+    }
+
+    function renderTable() {
+      const q = document.getElementById('search-input').value.trim().toLowerCase();
+      const statusFilter = document.getElementById('status-filter').value;
+      const tbody = document.getElementById('emp-tbody');
+      const countEl = document.getElementById('count-label');
+
+      const filtered = employees.filter(emp => {
+        if (statusFilter !== 'ALL' && emp.status !== statusFilter) return false;
+        if (!q) return true;
+        const hay = `${emp.id} ${emp.name} ${emp.kana} ${emp.dept} ${emp.empType} ${emp.note}`.toLowerCase();
+        return hay.includes(q);
+      });
+
+      countEl.textContent = `表示: ${filtered.length}件 / 全${employees.length}件`;
+
+      if (filtered.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="8" class="empty-cell">該当する従業員データがありません。</td></tr>';
+        return;
+      }
+
+      tbody.innerHTML = filtered.map(emp => {
+        const badgeClass = emp.status === '在籍' ? 'status-active' : 'status-inactive';
+        return `
+          <tr>
+            <td><code>${escapeHtml(emp.id)}</code></td>
+            <td><strong>${escapeHtml(emp.name)}</strong></td>
+            <td>${escapeHtml(emp.kana)}</td>
+            <td>${escapeHtml(emp.dept || '未設定')}</td>
+            <td>${escapeHtml(emp.empType || '-')}</td>
+            <td><span class="status-badge ${badgeClass}">${escapeHtml(emp.status || '在籍')}</span></td>
+            <td>${escapeHtml(emp.note)}</td>
+            <td>
+              <div class="row-actions">
+                <button class="btn btn-sm" onclick="openEditModal('${escapeHtml(emp.id)}')">編集</button>
+                <button class="btn btn-sm btn-danger" onclick="handleDelete('${escapeHtml(emp.id)}', '${escapeHtml(emp.name)}')">削除</button>
+              </div>
+            </td>
+          </tr>
+        `;
+      }).join('');
+    }
+
+    function openCreateModal() {
+      editingId = null;
+      document.getElementById('modal-title').textContent = '従業員の新規登録';
+      const idInput = document.getElementById('f-id');
+      idInput.value = '';
+      idInput.disabled = false;
+      document.getElementById('gen-id-btn').style.display = 'inline-block';
+      document.getElementById('f-name').value = '';
+      document.getElementById('f-kana').value = '';
+      document.getElementById('f-dept').value = '';
+      document.getElementById('f-emptype').value = '正社員';
+      document.getElementById('f-status').value = '在籍';
+      document.getElementById('f-qrurl').value = '';
+      document.getElementById('f-note').value = '';
+      document.getElementById('emp-modal').classList.add('show');
+      document.getElementById('f-name').focus();
+    }
+
+    function openEditModal(empId) {
+      const emp = employees.find(item => item.id === empId);
+      if (!emp) return;
+      editingId = emp.id;
+      document.getElementById('modal-title').textContent = `従業員の編集（${emp.id}）`;
+      const idInput = document.getElementById('f-id');
+      idInput.value = emp.id;
+      idInput.disabled = true;
+      document.getElementById('gen-id-btn').style.display = 'none';
+      document.getElementById('f-name').value = emp.name;
+      document.getElementById('f-kana').value = emp.kana;
+      document.getElementById('f-dept').value = emp.dept;
+      document.getElementById('f-emptype').value = emp.empType || '';
+      document.getElementById('f-status').value = emp.status || '在籍';
+      document.getElementById('f-qrurl').value = emp.qrUrl || '';
+      document.getElementById('f-note').value = emp.note || '';
+      document.getElementById('emp-modal').classList.add('show');
+      document.getElementById('f-name').focus();
+    }
+
+    function closeModal() {
+      document.getElementById('emp-modal').classList.remove('show');
+    }
+
+    async function handleSave(event) {
+      event.preventDefault();
+      const saveBtn = document.getElementById('save-btn');
+      const isNew = (editingId === null);
+
+      const payloadEmp = {
+        id: isNew ? document.getElementById('f-id').value.trim() : editingId,
+        name: document.getElementById('f-name').value.trim(),
+        kana: document.getElementById('f-kana').value.trim(),
+        dept: document.getElementById('f-dept').value.trim(),
+        empType: document.getElementById('f-emptype').value,
+        status: document.getElementById('f-status').value,
+        qrUrl: document.getElementById('f-qrurl').value.trim(),
+        note: document.getElementById('f-note').value.trim()
+      };
+
+      if (!payloadEmp.name) {
+        showToast('氏名は必須です。', true);
+        return;
+      }
+
+      saveBtn.disabled = true;
+      saveBtn.textContent = '保存中...';
+
+      try {
+        const res = await postApi({
+          action: 'saveEmployee',
+          isNew: isNew,
+          employee: payloadEmp
+        });
+        if (!res.success) {
+          throw new Error(res.message || '保存に失敗しました');
+        }
+        closeModal();
+        showToast(res.message || '保存しました');
+        await loadEmployees();
+      } catch (err) {
+        showToast('保存エラー: ' + err.message, true);
+      } finally {
+        saveBtn.disabled = false;
+        saveBtn.textContent = '保存する';
+      }
+    }
+
+    async function handleDelete(empId, empName) {
+      const ok = confirm(`「${empName || empId}（ID: ${empId}）」を従業員マスタから削除しますか？\n※過去の打刻ログや日次集計の履歴は残りますが、マスタ行は削除されます。`);
+      if (!ok) return;
+
+      try {
+        const res = await postApi({
+          action: 'deleteEmployee',
+          empId: empId
+        });
+        if (!res.success) {
+          throw new Error(res.message || '削除に失敗しました');
+        }
+        showToast(res.message || '削除しました');
+        await loadEmployees();
+      } catch (err) {
+        showToast('削除エラー: ' + err.message, true);
+      }
+    }
+
+    window.addEventListener('load', loadEmployees);
+  </script>
+</body>
+</html>
