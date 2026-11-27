@@ -131,9 +131,48 @@
       display: flex;
       justify-content: space-between;
       align-items: center;
-      padding: 4px 6px;
+      gap: 8px;
+      padding: 5px 8px;
       border-radius: 6px;
       background: rgba(15, 23, 42, 0.55);
+    }
+    .recent-log-main {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      min-width: 0;
+      flex-wrap: wrap;
+    }
+    .recent-log-meta {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      flex-shrink: 0;
+      font-variant-numeric: tabular-nums;
+    }
+    .log-status {
+      font-size: 0.72rem;
+      font-weight: 700;
+      padding: 1px 6px;
+      border-radius: 999px;
+      background: rgba(148, 163, 184, 0.2);
+      color: #cbd5e1;
+    }
+    .log-status.is-pending {
+      background: rgba(56, 189, 248, 0.2);
+      color: #7dd3fc;
+    }
+    .log-status.is-success {
+      background: rgba(34, 197, 94, 0.2);
+      color: #86efac;
+    }
+    .log-status.is-warning {
+      background: rgba(245, 158, 11, 0.22);
+      color: #fcd34d;
+    }
+    .log-status.is-error {
+      background: rgba(239, 68, 68, 0.22);
+      color: #fca5a5;
     }
     .recent-log-empty {
       color: var(--muted);
@@ -246,6 +285,7 @@
     let overlayTimer = null;
     let lastScannedId = null;
     let lastScannedAt = 0;
+    let logSeq = 0;
     const recentLogs = [];
 
     function getDeviceLabel() {
@@ -346,19 +386,49 @@
         listEl.innerHTML = '<li class="recent-log-empty">まだ打刻はありません</li>';
         return;
       }
-      listEl.innerHTML = recentLogs.map(item => `
-        <li class="recent-log-item">
-          <span><strong>${escapeHtml(item.name)}</strong>（${escapeHtml(item.stampType)}）</span>
-          <span>${escapeHtml(item.time)}</span>
-        </li>
-      `).join('');
+      listEl.innerHTML = recentLogs.map(item => {
+        const statusClass = item.statusType === 'pending' ? 'is-pending'
+          : item.statusType === 'success' ? 'is-success'
+          : item.statusType === 'warning' ? 'is-warning'
+          : item.statusType === 'error' ? 'is-error' : '';
+        const statusBadge = item.statusText
+          ? `<span class="log-status ${statusClass}">${escapeHtml(item.statusText)}</span>`
+          : '';
+        return `
+          <li class="recent-log-item">
+            <span class="recent-log-main">
+              <strong>${escapeHtml(item.name)}</strong>（${escapeHtml(item.stampType)}）
+            </span>
+            <span class="recent-log-meta">
+              ${statusBadge}
+              <span>${escapeHtml(item.time)}</span>
+            </span>
+          </li>
+        `;
+      }).join('');
     }
 
-    function pushRecentLog(name, stampType, time) {
-      recentLogs.unshift({ name, stampType, time });
+    function addPendingRecentLog(name, stampType, time) {
+      const id = ++logSeq;
+      recentLogs.unshift({
+        id,
+        name,
+        stampType,
+        time,
+        statusText: '送信中',
+        statusType: 'pending'
+      });
       if (recentLogs.length > MAX_RECENT_LOGS) {
         recentLogs.pop();
       }
+      renderRecentLogs();
+      return id;
+    }
+
+    function updateRecentLogStatus(id, patch) {
+      const target = recentLogs.find(item => item.id === id);
+      if (!target) return;
+      Object.assign(target, patch);
       renderRecentLogs();
     }
 
@@ -465,7 +535,10 @@
       const optimisticType = guessStampTypeFast(normalizedId, currentMode);
       const requestMode = currentMode;
 
-      // 通信完了を待たずに約0.85秒で完了演出へ進め、次の打刻を素早く受け付ける
+      // 1. 読み取り後すぐに「直近の打刻」へ仮表示を追加
+      const pendingLogId = addPendingRecentLog(normalizedId, optimisticType, stampTime);
+
+      // 2. 完了演出は約0.85秒で自動的に次へ進め、連続打刻を素早く受け付ける
       playTone('success');
       showOverlay(
         'success',
@@ -475,7 +548,7 @@
         FAST_COMPLETE_MS
       );
 
-      // 裏側でGASへ記録送信し、確定結果・休憩合計・警告・エラーを反映する
+      // 3. 処理完了後にステータス・確定情報を反映
       callGasApi({
         action: 'recordAttendance',
         empId: normalizedId,
@@ -486,7 +559,18 @@
           const confirmedName = res.employeeName || normalizedId;
           const confirmedType = res.stampType || optimisticType;
           const confirmedTime = res.time || stampTime;
-          pushRecentLog(confirmedName, confirmedType, confirmedTime);
+          const breakSuffix = (confirmedType === '休憩終了' && res.breakMinutes !== null && res.breakMinutes !== undefined)
+            ? ` / 休憩${res.breakMinutes}分`
+            : '';
+
+          updateRecentLogStatus(pendingLogId, {
+            name: confirmedName,
+            stampType: confirmedType,
+            time: confirmedTime,
+            statusText: `記録済${breakSuffix}`,
+            statusType: 'success'
+          });
+
           if (confirmedType === '休憩終了' && res.breakMinutes !== null && res.breakMinutes !== undefined) {
             showOverlay(
               'success',
@@ -497,13 +581,25 @@
             );
           }
         } else if (res && res.isDuplicate) {
+          updateRecentLogStatus(pendingLogId, {
+            statusText: '重複',
+            statusType: 'warning'
+          });
           playTone('error');
           showOverlay('warning', '連続打刻防止', '', res.message, WARNING_OVERLAY_MS);
         } else {
+          updateRecentLogStatus(pendingLogId, {
+            statusText: 'エラー',
+            statusType: 'error'
+          });
           playTone('error');
           showOverlay('error', '記録エラー', '', (res && res.message) || '記録に失敗しました', ERROR_OVERLAY_MS);
         }
       }).catch((err) => {
+        updateRecentLogStatus(pendingLogId, {
+          statusText: '通信エラー',
+          statusType: 'error'
+        });
         playTone('error');
         const msg = err && err.name === 'AbortError'
           ? '通信がタイムアウトしました。電波状況をご確認ください。'
