@@ -389,7 +389,8 @@
 
           <div class="form-field">
             <label for="f-dept">現所属部署</label>
-            <input id="f-dept" type="text" placeholder="例: 営業部" oninput="syncDeptIdFromInput()">
+            <input id="f-dept" type="text" list="dept-options" autocomplete="off" placeholder="選択または直接入力（例: 営業部）" oninput="syncDeptIdFromInput()" onchange="syncDeptIdFromInput()">
+            <datalist id="dept-options"></datalist>
           </div>
 
           <div class="form-field">
@@ -470,6 +471,22 @@
         }
         if (!/^[0-9]+$/.test(id) && !existingSet.has(id)) return id;
       }
+    }
+
+    /**
+     * 既存の従業員データから重複のない部署候補リストを更新する
+     */
+    function refreshDeptOptions() {
+      const dl = document.getElementById('dept-options');
+      if (!dl) return;
+      const deptSet = new Set(['営業部']);
+      employees.forEach(emp => {
+        const d = String(emp.dept || '').trim();
+        if (d) deptSet.add(d);
+      });
+      dl.innerHTML = Array.from(deptSet)
+        .map(d => `<option value="${escapeHtml(d)}"></option>`)
+        .join('');
     }
 
     /**
@@ -555,6 +572,7 @@
           throw new Error(data.message || '取得に失敗しました');
         }
         employees = Array.isArray(data.employees) ? data.employees : [];
+        refreshDeptOptions();
         renderTable();
       } catch (err) {
         tbody.innerHTML = `<tr><td colspan="8" class="empty-cell">取得エラー: ${escapeHtml(err.message)}</td></tr>`;
@@ -607,6 +625,7 @@
 
     function openCreateModal() {
       editingId = null;
+      refreshDeptOptions();
       document.getElementById('modal-title').textContent = '従業員の新規登録';
       const initialId = generateRandomId8();
       document.getElementById('f-id').value = initialId;
@@ -626,6 +645,7 @@
       const emp = employees.find(item => item.id === empId);
       if (!emp) return;
       editingId = emp.id;
+      refreshDeptOptions();
       document.getElementById('modal-title').textContent = `従業員の編集（${emp.id}）`;
       document.getElementById('f-id').value = emp.id;
       document.getElementById('f-name').value = emp.name;
