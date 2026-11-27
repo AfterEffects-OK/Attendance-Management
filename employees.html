@@ -315,7 +315,7 @@
       <div class="nav-actions">
         <a href="./index.html" class="btn">打刻画面へ</a>
         <a href="./card.html" class="btn">社員証QR印刷</a>
-        <button class="btn" onclick="loadEmployees()">再読み込み</button>
+        <button class="btn" onclick="loadAllData()">再読み込み</button>
         <button class="btn btn-primary" onclick="openCreateModal()">+ 新規登録</button>
       </div>
     </header>
@@ -388,14 +388,14 @@
           </div>
 
           <div class="form-field">
-            <label for="f-dept">現所属部署</label>
-            <input id="f-dept" type="text" list="dept-options" autocomplete="off" placeholder="選択または直接入力（例: 営業部）" oninput="syncDeptIdFromInput()" onchange="syncDeptIdFromInput()">
+            <label for="f-dept">現所属部署（選択または入力）</label>
+            <input id="f-dept" type="text" list="dept-options" autocomplete="off" placeholder="候補から選択 または 直接入力" oninput="syncDeptIdFromInput()" onchange="syncDeptIdFromInput()">
             <datalist id="dept-options"></datalist>
           </div>
 
           <div class="form-field">
-            <label for="f-deptid">部署ID</label>
-            <input id="f-deptid" type="text" readonly tabindex="-1" placeholder="部署名に連動します">
+            <label for="f-deptid">所属ID（部署に連動）</label>
+            <input id="f-deptid" type="text" readonly tabindex="-1" placeholder="部署に連動します">
           </div>
 
           <div class="form-field">
@@ -441,6 +441,7 @@
     const GAS_WEBAPP_URL = 'https://script.google.com/macros/s/AKfycbxXYd9al_H105tYO7RMG78hMoN27SQbEOaGy6vdst5IAUS0dhsHlx-3YdVPlMUIwGFy/exec';
 
     let employees = [];
+    let departments = [];
     let editingId = null;
 
     function showToast(msg, isError = false) {
@@ -474,49 +475,54 @@
     }
 
     /**
-     * 既存の従業員データから重複のない部署候補リストを更新する
+     * 「所属」シートから取得した部署リストを datalist に反映する
      */
     function refreshDeptOptions() {
       const dl = document.getElementById('dept-options');
       if (!dl) return;
-      const deptSet = new Set(['営業部']);
-      employees.forEach(emp => {
-        const d = String(emp.dept || '').trim();
-        if (d) deptSet.add(d);
+
+      const nameSet = new Set();
+      const optionsHtml = [];
+
+      departments.forEach(d => {
+        const name = String(d.name || '').trim();
+        if (!name || nameSet.has(name)) return;
+        nameSet.add(name);
+        const label = d.id ? `${d.name} (${d.id})` : d.name;
+        optionsHtml.push(`<option value="${escapeHtml(name)}">${escapeHtml(label)}</option>`);
       });
-      dl.innerHTML = Array.from(deptSet)
-        .map(d => `<option value="${escapeHtml(d)}"></option>`)
-        .join('');
+
+      employees.forEach(emp => {
+        const name = String(emp.dept || '').trim();
+        if (!name || nameSet.has(name)) return;
+        nameSet.add(name);
+        optionsHtml.push(`<option value="${escapeHtml(name)}"></option>`);
+      });
+
+      dl.innerHTML = optionsHtml.join('');
     }
 
     /**
-     * 部署名から部署IDを連動生成する
-     * （部署シート作成後はこの関数のマスタ参照ロジックを差し替え可能）
+     * 部署名から「所属」マスタの所属IDを連動取得する
+     * 「所属」シートに未登録の部署名を入力した場合は保存時に新規採番されることを示す
      */
     function resolveDeptId(deptName) {
       const cleanName = String(deptName || '').trim();
       if (!cleanName) return '';
 
-      const matched = employees.find(
+      const foundDept = departments.find(d => String(d.name || '').trim() === cleanName);
+      if (foundDept && foundDept.id) {
+        return String(foundDept.id).trim();
+      }
+
+      const foundEmp = employees.find(
         e => String(e.dept || '').trim() === cleanName && String(e.deptId || '').trim()
       );
-      if (matched) {
-        return String(matched.deptId).trim();
+      if (foundEmp) {
+        return String(foundEmp.deptId).trim();
       }
 
-      const safePart = cleanName
-        .replace(/\s+/g, '_')
-        .replace(/[^A-Za-z0-9_\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FFF]/g, '');
-
-      if (safePart) {
-        return `DEPT_${safePart}`;
-      }
-
-      let hash = 0;
-      for (let i = 0; i < cleanName.length; i++) {
-        hash = ((hash << 5) - hash + cleanName.charCodeAt(i)) | 0;
-      }
-      return `DEPT_${Math.abs(hash).toString(36).toUpperCase()}`;
+      return '（新規追加時に自動採番）';
     }
 
     function syncDeptIdFromInput() {
@@ -560,6 +566,18 @@
       return await res.json();
     }
 
+    async function loadDepartments() {
+      try {
+        const res = await postApi({ action: 'getDepartmentsMaster' });
+        if (res.success && Array.isArray(res.departments)) {
+          departments = res.departments;
+        }
+      } catch (err) {
+        // 「所属」シートが空または未デプロイでも従業員一覧は表示継続
+      }
+      refreshDeptOptions();
+    }
+
     async function loadEmployees() {
       const tbody = document.getElementById('emp-tbody');
       const countEl = document.getElementById('count-label');
@@ -579,6 +597,10 @@
         countEl.textContent = '取得失敗';
         showToast('従業員一覧の取得に失敗しました: ' + err.message, true);
       }
+    }
+
+    async function loadAllData() {
+      await Promise.all([loadDepartments(), loadEmployees()]);
     }
 
     function renderTable() {
@@ -651,7 +673,7 @@
       document.getElementById('f-name').value = emp.name;
       document.getElementById('f-kana').value = emp.kana;
       document.getElementById('f-dept').value = emp.dept;
-      document.getElementById('f-deptid').value = emp.deptId || resolveDeptId(emp.dept);
+      document.getElementById('f-deptid').value = resolveDeptId(emp.dept);
       document.getElementById('f-emptype').value = emp.empType || '';
       document.getElementById('f-status').value = emp.status || '在籍';
       updateQrDisplay(emp.id, emp.qrUrl);
@@ -672,7 +694,8 @@
         ? (document.getElementById('f-id').value.trim() || generateRandomId8())
         : editingId;
       const resolvedDept = document.getElementById('f-dept').value.trim();
-      const resolvedDeptId = document.getElementById('f-deptid').value.trim() || resolveDeptId(resolvedDept);
+      const rawDeptIdField = document.getElementById('f-deptid').value.trim();
+      const resolvedDeptId = (rawDeptIdField && !rawDeptIdField.startsWith('（')) ? rawDeptIdField : '';
       const resolvedQrUrl = buildQrImageUrl(resolvedId);
 
       const payloadEmp = {
@@ -706,7 +729,7 @@
         }
         closeModal();
         showToast(res.message || '保存しました');
-        await loadEmployees();
+        await loadAllData();
       } catch (err) {
         showToast('保存エラー: ' + err.message, true);
       } finally {
@@ -734,7 +757,7 @@
       }
     }
 
-    window.addEventListener('load', loadEmployees);
+    window.addEventListener('load', loadAllData);
   </script>
 </body>
 </html>
