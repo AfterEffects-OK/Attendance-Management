@@ -446,7 +446,12 @@
       lastScannedId = normalizedId;
       lastScannedAt = nowMs;
 
-      showOverlay('loading', '送信中...', normalizedId, '記録しています');
+      // 400ms以上かかった場合のみ「記録中」を表示してチラつき・待ち時間感を軽減
+      const loadingTimer = setTimeout(() => {
+        if (isProcessing) {
+          showOverlay('loading', '送信中...', normalizedId, '記録しています');
+        }
+      }, 400);
 
       try {
         const res = await callGasApi({
@@ -455,6 +460,7 @@
           mode: currentMode,
           deviceName: DEVICE_LABEL
         });
+        clearTimeout(loadingTimer);
 
         if (res.success) {
           playTone('success');
@@ -478,6 +484,7 @@
           showOverlay('error', 'エラー', '', res.message, ERROR_OVERLAY_MS);
         }
       } catch (err) {
+        clearTimeout(loadingTimer);
         playTone('error');
         const msg = err && err.name === 'AbortError'
           ? '通信がタイムアウトしました。電波状況をご確認ください。'
