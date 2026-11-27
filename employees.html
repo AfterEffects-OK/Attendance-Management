@@ -389,7 +389,12 @@
 
           <div class="form-field">
             <label for="f-dept">現所属部署</label>
-            <input id="f-dept" type="text" placeholder="例: 営業部">
+            <input id="f-dept" type="text" placeholder="例: 営業部" oninput="syncDeptIdFromInput()">
+          </div>
+
+          <div class="form-field">
+            <label for="f-deptid">部署ID</label>
+            <input id="f-deptid" type="text" readonly tabindex="-1" placeholder="部署名に連動します">
           </div>
 
           <div class="form-field">
@@ -465,6 +470,41 @@
         }
         if (!/^[0-9]+$/.test(id) && !existingSet.has(id)) return id;
       }
+    }
+
+    /**
+     * 部署名から部署IDを連動生成する
+     * （部署シート作成後はこの関数のマスタ参照ロジックを差し替え可能）
+     */
+    function resolveDeptId(deptName) {
+      const cleanName = String(deptName || '').trim();
+      if (!cleanName) return '';
+
+      const matched = employees.find(
+        e => String(e.dept || '').trim() === cleanName && String(e.deptId || '').trim()
+      );
+      if (matched) {
+        return String(matched.deptId).trim();
+      }
+
+      const safePart = cleanName
+        .replace(/\s+/g, '_')
+        .replace(/[^A-Za-z0-9_\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FFF]/g, '');
+
+      if (safePart) {
+        return `DEPT_${safePart}`;
+      }
+
+      let hash = 0;
+      for (let i = 0; i < cleanName.length; i++) {
+        hash = ((hash << 5) - hash + cleanName.charCodeAt(i)) | 0;
+      }
+      return `DEPT_${Math.abs(hash).toString(36).toUpperCase()}`;
+    }
+
+    function syncDeptIdFromInput() {
+      const deptVal = document.getElementById('f-dept').value;
+      document.getElementById('f-deptid').value = resolveDeptId(deptVal);
     }
 
     function buildQrImageUrl(empId) {
@@ -573,6 +613,7 @@
       document.getElementById('f-name').value = '';
       document.getElementById('f-kana').value = '';
       document.getElementById('f-dept').value = '';
+      document.getElementById('f-deptid').value = '';
       document.getElementById('f-emptype').value = '正社員';
       document.getElementById('f-status').value = '在籍';
       updateQrDisplay(initialId);
@@ -590,6 +631,7 @@
       document.getElementById('f-name').value = emp.name;
       document.getElementById('f-kana').value = emp.kana;
       document.getElementById('f-dept').value = emp.dept;
+      document.getElementById('f-deptid').value = emp.deptId || resolveDeptId(emp.dept);
       document.getElementById('f-emptype').value = emp.empType || '';
       document.getElementById('f-status').value = emp.status || '在籍';
       updateQrDisplay(emp.id, emp.qrUrl);
@@ -609,13 +651,16 @@
       const resolvedId = isNew
         ? (document.getElementById('f-id').value.trim() || generateRandomId8())
         : editingId;
+      const resolvedDept = document.getElementById('f-dept').value.trim();
+      const resolvedDeptId = document.getElementById('f-deptid').value.trim() || resolveDeptId(resolvedDept);
       const resolvedQrUrl = buildQrImageUrl(resolvedId);
 
       const payloadEmp = {
         id: resolvedId,
         name: document.getElementById('f-name').value.trim(),
         kana: document.getElementById('f-kana').value.trim(),
-        dept: document.getElementById('f-dept').value.trim(),
+        dept: resolvedDept,
+        deptId: resolvedDeptId,
         empType: document.getElementById('f-emptype').value,
         status: document.getElementById('f-status').value,
         qrUrl: resolvedQrUrl,
