@@ -1,0 +1,653 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>勤怠確認・承認</title>
+  <style>
+    :root {
+      --bg: #0f172a;
+      --surface: #1e293b;
+      --surface-2: #0b1120;
+      --text: #f8fafc;
+      --muted: #94a3b8;
+      --accent: #38bdf8;
+      --success: #22c55e;
+      --warning: #f59e0b;
+      --danger: #ef4444;
+      --border: #334155;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Hiragino Kaku Gothic ProN", sans-serif;
+      padding: 16px;
+      min-height: 100vh;
+    }
+    .container {
+      max-width: 1280px;
+      margin: 0 auto;
+    }
+    header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 12px;
+      padding-bottom: 14px;
+      border-bottom: 1px solid var(--border);
+      margin-bottom: 16px;
+    }
+    h1 { font-size: 1.35rem; font-weight: 700; }
+    .sub-caption { color: var(--muted); font-size: 0.82rem; margin-top: 2px; }
+    .nav-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+    .btn {
+      background: var(--surface);
+      color: var(--text);
+      border: 1px solid #475569;
+      padding: 8px 12px;
+      border-radius: 8px;
+      font-size: 0.84rem;
+      font-weight: 600;
+      text-decoration: none;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+    .btn:hover { border-color: var(--accent); }
+    .btn-primary {
+      background: var(--accent);
+      color: #062033;
+      border-color: var(--accent);
+    }
+    .btn-approve {
+      background: rgba(34, 197, 94, 0.18);
+      color: #86efac;
+      border-color: rgba(34, 197, 94, 0.5);
+    }
+    .btn-reject {
+      background: rgba(239, 68, 68, 0.16);
+      color: #fca5a5;
+      border-color: rgba(239, 68, 68, 0.45);
+    }
+    .btn-sm {
+      padding: 5px 9px;
+      font-size: 0.78rem;
+      border-radius: 6px;
+    }
+    .panel {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 14px;
+      margin-bottom: 14px;
+    }
+    .filter-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-end;
+      flex-wrap: wrap;
+      gap: 12px;
+    }
+    .filter-group {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+      align-items: flex-end;
+    }
+    .field-box {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+    label {
+      font-size: 0.76rem;
+      color: var(--muted);
+      font-weight: 600;
+    }
+    input, select {
+      background: var(--surface-2);
+      color: var(--text);
+      border: 1px solid #475569;
+      border-radius: 7px;
+      padding: 7px 10px;
+      font-size: 0.85rem;
+      font-family: inherit;
+    }
+    input:focus, select:focus { outline: none; border-color: var(--accent); }
+    .summary-bar {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+      gap: 10px;
+      margin-bottom: 14px;
+    }
+    .summary-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 12px 14px;
+    }
+    .summary-label { font-size: 0.75rem; color: var(--muted); margin-bottom: 4px; }
+    .summary-val { font-size: 1.2rem; font-weight: 700; font-variant-numeric: tabular-nums; }
+    .summary-val.warn { color: #fcd34d; }
+    .summary-val.ok { color: #86efac; }
+    .table-wrap {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      overflow-x: auto;
+    }
+    table { width: 100%; border-collapse: collapse; font-size: 0.84rem; }
+    th, td {
+      padding: 9px 10px;
+      border-bottom: 1px solid #293548;
+      text-align: left;
+      vertical-align: middle;
+      white-space: nowrap;
+    }
+    th {
+      background: rgba(15, 23, 42, 0.78);
+      color: var(--muted);
+      font-size: 0.75rem;
+      font-weight: 700;
+    }
+    tr:last-child td { border-bottom: none; }
+    .badge {
+      display: inline-block;
+      padding: 2px 8px;
+      border-radius: 999px;
+      font-size: 0.72rem;
+      font-weight: 700;
+    }
+    .badge-unapproved { background: rgba(245, 158, 11, 0.18); color: #fcd34d; }
+    .badge-approved { background: rgba(34, 197, 94, 0.18); color: #86efac; }
+    .badge-rejected { background: rgba(239, 68, 68, 0.18); color: #fca5a5; }
+    .action-cell { display: flex; gap: 6px; align-items: center; }
+    .empty-cell { text-align: center; color: var(--muted); padding: 28px 12px; }
+    .toast {
+      position: fixed;
+      right: 16px;
+      bottom: 16px;
+      background: var(--surface);
+      border: 1px solid var(--accent);
+      color: var(--text);
+      padding: 10px 14px;
+      border-radius: 8px;
+      font-size: 0.85rem;
+      box-shadow: 0 10px 25px rgba(0, 0, 0, 0.45);
+      display: none;
+      z-index: 200;
+    }
+    .toast.show { display: block; }
+    .toast.error { border-color: var(--danger); color: #fecaca; }
+
+    /* 詳細・承認モーダル */
+    .modal-backdrop {
+      position: fixed;
+      inset: 0;
+      background: rgba(2, 6, 23, 0.78);
+      display: none;
+      justify-content: center;
+      align-items: center;
+      padding: 16px;
+      z-index: 150;
+    }
+    .modal-backdrop.show { display: flex; }
+    .modal {
+      width: 100%;
+      max-width: 580px;
+      background: var(--surface);
+      border: 1px solid #475569;
+      border-radius: 12px;
+      padding: 18px;
+      max-height: 90vh;
+      overflow-y: auto;
+    }
+    .modal-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding-bottom: 10px;
+      margin-bottom: 14px;
+      border-bottom: 1px solid var(--border);
+    }
+    .log-list {
+      margin-top: 12px;
+      background: var(--surface-2);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 10px 12px;
+      font-size: 0.8rem;
+    }
+    .log-item {
+      display: flex;
+      justify-content: space-between;
+      padding: 5px 0;
+      border-bottom: 1px dashed #1e293b;
+    }
+    .log-item:last-child { border-bottom: none; }
+    .modal-footer {
+      display: flex;
+      justify-content: flex-end;
+      gap: 8px;
+      margin-top: 16px;
+      padding-top: 12px;
+      border-top: 1px solid var(--border);
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <div>
+        <h1>勤怠確認・承認</h1>
+        <div class="sub-caption">日次勤怠と打刻ログを確認し、承認ステータス・管理者メモを更新します</div>
+      </div>
+      <div class="nav-actions">
+        <a href="./employees.html" class="btn">従業員マスタ管理</a>
+        <a href="./payroll.html" class="btn">給与計算</a>
+        <a href="./index.html" class="btn">打刻画面へ</a>
+      </div>
+    </header>
+
+    <div class="panel">
+      <div class="filter-row">
+        <div class="filter-group">
+          <div class="field-box">
+            <label for="start-date">対象開始日</label>
+            <input id="start-date" type="date">
+          </div>
+          <div class="field-box">
+            <label for="end-date">対象終了日</label>
+            <input id="end-date" type="date">
+          </div>
+          <div class="field-box">
+            <label for="approval-filter">承認状態</label>
+            <select id="approval-filter" onchange="renderTable()">
+              <option value="ALL">すべて</option>
+              <option value="未承認">未承認</option>
+              <option value="承認済">承認済</option>
+              <option value="差戻し">差戻し</option>
+            </select>
+          </div>
+          <div class="field-box">
+            <label for="work-filter">勤務状態</label>
+            <select id="work-filter" onchange="renderTable()">
+              <option value="ALL">すべて</option>
+              <option value="勤務中">勤務中</option>
+              <option value="退勤済">退勤済</option>
+              <option value="打刻漏れ">打刻漏れ</option>
+            </select>
+          </div>
+          <div class="field-box">
+            <label for="keyword-input">氏名・ID・部署検索</label>
+            <input id="keyword-input" type="text" placeholder="例: 山田 / 営業部" oninput="renderTable()">
+          </div>
+        </div>
+        <div class="filter-group">
+          <button class="btn btn-primary" onclick="loadReviewData()">勤怠を読み込む</button>
+          <button class="btn btn-approve" onclick="bulkApproveSelected()">選択分を一括承認</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="summary-bar">
+      <div class="summary-card">
+        <div class="summary-label">表示対象件数</div>
+        <div id="sum-total" class="summary-val">0件</div>
+      </div>
+      <div class="summary-card">
+        <div class="summary-label">未承認</div>
+        <div id="sum-unapproved" class="summary-val warn">0件</div>
+      </div>
+      <div class="summary-card">
+        <div class="summary-label">承認済</div>
+        <div id="sum-approved" class="summary-val ok">0件</div>
+      </div>
+      <div class="summary-card">
+        <div class="summary-label">打刻漏れ・勤務中</div>
+        <div id="sum-incomplete" class="summary-val">0件</div>
+      </div>
+    </div>
+
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th><input type="checkbox" id="check-all" onchange="toggleSelectAll(this.checked)"></th>
+            <th>対象日</th>
+            <th>従業員 / 部署</th>
+            <th>出勤</th>
+            <th>退勤</th>
+            <th>休憩</th>
+            <th>実働</th>
+            <th>勤務状態</th>
+            <th>承認状態</th>
+            <th>管理者メモ</th>
+            <th>操作</th>
+          </tr>
+        </thead>
+        <tbody id="review-tbody">
+          <tr><td colspan="11" class="empty-cell">勤怠データを読み込んでいます...</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- 勤怠詳細・承認モーダル -->
+  <div id="detail-modal" class="modal-backdrop">
+    <div class="modal">
+      <div class="modal-header">
+        <div id="m-title" style="font-weight:700; font-size:1rem;">勤怠詳細・承認</div>
+        <button class="btn btn-sm" onclick="closeModal()">閉じる</button>
+      </div>
+
+      <div id="m-summary" style="font-size:0.84rem; color:var(--muted); margin-bottom:12px;"></div>
+
+      <div class="field-box" style="margin-bottom:10px;">
+        <label for="m-approval-status">承認ステータス</label>
+        <select id="m-approval-status">
+          <option value="承認済">承認済</option>
+          <option value="未承認">未承認</option>
+          <option value="差戻し">差戻し</option>
+        </select>
+      </div>
+
+      <div class="field-box">
+        <label for="m-admin-note">管理者メモ</label>
+        <input id="m-admin-note" type="text" placeholder="承認コメントや打刻修正理由など">
+      </div>
+
+      <div class="log-list">
+        <div style="font-weight:700; color:var(--muted); margin-bottom:6px;">打刻ログ履歴</div>
+        <div id="m-logs"></div>
+      </div>
+
+      <div class="modal-footer">
+        <button class="btn" onclick="closeModal()">キャンセル</button>
+        <button class="btn btn-primary" onclick="saveModalApproval()">更新を保存</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="toast" class="toast"></div>
+
+  <script>
+    const GAS_WEBAPP_URL = 'https://script.google.com/macros/s/AKfycbxXYd9al_H105tYO7RMG78hMoN27SQbEOaGy6vdst5IAUS0dhsHlx-3YdVPlMUIwGFy/exec';
+    let reviewRecords = [];
+    let selectedKeys = new Set();
+    let activeRecordKey = null;
+
+    function showToast(msg, isError = false) {
+      const el = document.getElementById('toast');
+      el.textContent = msg;
+      el.className = 'toast show' + (isError ? ' error' : '');
+      clearTimeout(showToast._t);
+      showToast._t = setTimeout(() => { el.className = 'toast'; }, 3200);
+    }
+
+    function escapeHtml(s) {
+      return String(s || '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
+    }
+
+    function recordKey(rec) {
+      return rec.attendanceId || `${rec.empId}__${rec.date}`;
+    }
+
+    function formatMins(mins) {
+      const m = Math.max(0, Number(mins) || 0);
+      const h = Math.floor(m / 60);
+      const r = m % 60;
+      return `${h}h${String(r).padStart(2, '0')}m`;
+    }
+
+    function setDefaultDates() {
+      const now = new Date();
+      const yyyy = now.getFullYear();
+      const mm = String(now.getMonth() + 1).padStart(2, '0');
+      const dd = String(now.getDate()).padStart(2, '0');
+      const todayStr = `${yyyy}-${mm}-${dd}`;
+      document.getElementById('start-date').value = `${yyyy}-${mm}-01`;
+      document.getElementById('end-date').value = todayStr;
+    }
+
+    async function postApi(payload) {
+      const res = await fetch(GAS_WEBAPP_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+        body: JSON.stringify(payload)
+      });
+      if (!res.ok) throw new Error('HTTPエラー: ' + res.status);
+      return await res.json();
+    }
+
+    async function loadReviewData() {
+      const s = document.getElementById('start-date').value;
+      const e = document.getElementById('end-date').value;
+      if (!s || !e) {
+        showToast('対象開始日と終了日を指定してください。', true);
+        return;
+      }
+
+      const tbody = document.getElementById('review-tbody');
+      tbody.innerHTML = '<tr><td colspan="11" class="empty-cell">勤怠データを取得中...</td></tr>';
+
+      try {
+        const res = await postApi({
+          action: 'getAttendanceReviewList',
+          startDate: s.replace(/-/g, '/'),
+          endDate: e.replace(/-/g, '/')
+        });
+        if (!res.success) throw new Error(res.message || '取得に失敗しました');
+        reviewRecords = Array.isArray(res.records) ? res.records : [];
+        selectedKeys.clear();
+        document.getElementById('check-all').checked = false;
+        renderTable();
+      } catch (err) {
+        tbody.innerHTML = `<tr><td colspan="11" class="empty-cell">取得エラー: ${escapeHtml(err.message)}</td></tr>`;
+        showToast('取得エラー: ' + err.message, true);
+      }
+    }
+
+    function getFilteredRecords() {
+      const appFilter = document.getElementById('approval-filter').value;
+      const workFilter = document.getElementById('work-filter').value;
+      const kw = document.getElementById('keyword-input').value.trim().toLowerCase();
+
+      return reviewRecords.filter(rec => {
+        if (appFilter !== 'ALL' && (rec.approvalStatus || '未承認') !== appFilter) return false;
+        if (workFilter !== 'ALL' && rec.workStatus !== workFilter) return false;
+        if (!kw) return true;
+        return `${rec.empId} ${rec.employeeName} ${rec.dept} ${rec.date}`.toLowerCase().includes(kw);
+      });
+    }
+
+    function renderTable() {
+      const list = getFilteredRecords();
+      const tbody = document.getElementById('review-tbody');
+
+      const unapprovedCnt = list.filter(r => (r.approvalStatus || '未承認') === '未承認').length;
+      const approvedCnt = list.filter(r => r.approvalStatus === '承認済').length;
+      const incompleteCnt = list.filter(r => r.workStatus === '打刻漏れ' || r.workStatus === '勤務中').length;
+
+      document.getElementById('sum-total').textContent = `${list.length}件`;
+      document.getElementById('sum-unapproved').textContent = `${unapprovedCnt}件`;
+      document.getElementById('sum-approved').textContent = `${approvedCnt}件`;
+      document.getElementById('sum-incomplete').textContent = `${incompleteCnt}件`;
+
+      if (list.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="11" class="empty-cell">該当する勤怠データがありません。</td></tr>';
+        return;
+      }
+
+      tbody.innerHTML = list.map(rec => {
+        const key = recordKey(rec);
+        const status = rec.approvalStatus || '未承認';
+        let badgeClass = 'badge-unapproved';
+        if (status === '承認済') badgeClass = 'badge-approved';
+        else if (status === '差戻し') badgeClass = 'badge-rejected';
+
+        const checkedAttr = selectedKeys.has(key) ? 'checked' : '';
+
+        return `
+          <tr>
+            <td><input type="checkbox" ${checkedAttr} onchange="toggleSelect('${escapeHtml(key)}', this.checked)"></td>
+            <td>${escapeHtml(rec.date)}</td>
+            <td><strong>${escapeHtml(rec.employeeName)}</strong><div style="font-size:0.74rem;color:var(--muted);">${escapeHtml(rec.dept)} / <code>${escapeHtml(rec.empId)}</code></div></td>
+            <td>${escapeHtml(rec.clockIn || '-')}</td>
+            <td>${escapeHtml(rec.clockOut || '-')}</td>
+            <td>${Number(rec.breakMinutes || 0)}分</td>
+            <td>${formatMins(rec.netWorkMinutes)}</td>
+            <td>${escapeHtml(rec.workStatus || '-')}</td>
+            <td><span class="badge ${badgeClass}">${escapeHtml(status)}</span></td>
+            <td>${escapeHtml(rec.adminNote || '')}</td>
+            <td>
+              <div class="action-cell">
+                <button class="btn btn-sm btn-approve" onclick="quickUpdateApproval('${escapeHtml(key)}', '承認済')">承認</button>
+                <button class="btn btn-sm btn-reject" onclick="quickUpdateApproval('${escapeHtml(key)}', '差戻し')">差戻</button>
+                <button class="btn btn-sm" onclick="openDetailModal('${escapeHtml(key)}')">詳細</button>
+              </div>
+            </td>
+          </tr>
+        `;
+      }).join('');
+    }
+
+    function toggleSelect(key, checked) {
+      if (checked) selectedKeys.add(key);
+      else selectedKeys.delete(key);
+    }
+
+    function toggleSelectAll(checked) {
+      const list = getFilteredRecords();
+      selectedKeys.clear();
+      if (checked) {
+        list.forEach(rec => selectedKeys.add(recordKey(rec)));
+      }
+      renderTable();
+    }
+
+    async function quickUpdateApproval(key, nextStatus) {
+      const rec = reviewRecords.find(r => recordKey(r) === key);
+      if (!rec) return;
+
+      try {
+        const res = await postApi({
+          action: 'approveAttendanceRecord',
+          attendanceId: rec.attendanceId,
+          empId: rec.empId,
+          date: rec.date,
+          approvalStatus: nextStatus,
+          adminNote: rec.adminNote || ''
+        });
+        if (!res.success) throw new Error(res.message || '更新失敗');
+        rec.approvalStatus = nextStatus;
+        renderTable();
+        showToast(`${rec.employeeName}（${rec.date}）を「${nextStatus}」にしました。`);
+      } catch (err) {
+        showToast('更新エラー: ' + err.message, true);
+      }
+    }
+
+    async function bulkApproveSelected() {
+      if (selectedKeys.size === 0) {
+        showToast('一括承認する行をチェックしてください。', true);
+        return;
+      }
+      const targets = reviewRecords.filter(r => selectedKeys.has(recordKey(r)));
+      let okCount = 0;
+
+      for (const rec of targets) {
+        try {
+          const res = await postApi({
+            action: 'approveAttendanceRecord',
+            attendanceId: rec.attendanceId,
+            empId: rec.empId,
+            date: rec.date,
+            approvalStatus: '承認済',
+            adminNote: rec.adminNote || ''
+          });
+          if (res.success) {
+            rec.approvalStatus = '承認済';
+            okCount++;
+          }
+        } catch (e) {}
+      }
+
+      selectedKeys.clear();
+      document.getElementById('check-all').checked = false;
+      renderTable();
+      showToast(`${okCount}件の勤怠を一括承認しました。`);
+    }
+
+    function openDetailModal(key) {
+      const rec = reviewRecords.find(r => recordKey(r) === key);
+      if (!rec) return;
+      activeRecordKey = key;
+
+      document.getElementById('m-title').textContent = `${rec.employeeName}（${rec.date}）の勤怠詳細`;
+      document.getElementById('m-summary').textContent =
+        `出勤: ${rec.clockIn || '-'} / 退勤: ${rec.clockOut || '-'} / 休憩: ${rec.breakMinutes || 0}分 / 勤務状態: ${rec.workStatus || '-'}`;
+      document.getElementById('m-approval-status').value = rec.approvalStatus || '未承認';
+      document.getElementById('m-admin-note').value = rec.adminNote || '';
+
+      const logsDiv = document.getElementById('m-logs');
+      const logs = Array.isArray(rec.logs) ? rec.logs : [];
+      if (logs.length === 0) {
+        logsDiv.innerHTML = '<div style="color:var(--muted);">打刻ログはありません。</div>';
+      } else {
+        logsDiv.innerHTML = logs.map(l => `
+          <div class="log-item">
+            <span><strong>${escapeHtml(l.stampType)}</strong>（${escapeHtml(l.time || '-')}）</span>
+            <span style="color:var(--muted);">${escapeHtml(l.deviceName || '')}${l.isManual ? ' [手修正]' : ''}</span>
+          </div>
+        `).join('');
+      }
+
+      document.getElementById('detail-modal').classList.add('show');
+    }
+
+    function closeModal() {
+      activeRecordKey = null;
+      document.getElementById('detail-modal').classList.remove('show');
+    }
+
+    async function saveModalApproval() {
+      if (!activeRecordKey) return;
+      const rec = reviewRecords.find(r => recordKey(r) === activeRecordKey);
+      if (!rec) return;
+
+      const nextStatus = document.getElementById('m-approval-status').value;
+      const nextNote = document.getElementById('m-admin-note').value.trim();
+
+      try {
+        const res = await postApi({
+          action: 'approveAttendanceRecord',
+          attendanceId: rec.attendanceId,
+          empId: rec.empId,
+          date: rec.date,
+          approvalStatus: nextStatus,
+          adminNote: nextNote
+        });
+        if (!res.success) throw new Error(res.message || '保存失敗');
+        rec.approvalStatus = nextStatus;
+        rec.adminNote = nextNote;
+        closeModal();
+        renderTable();
+        showToast('承認ステータスと管理者メモを保存しました。');
+      } catch (err) {
+        showToast('保存エラー: ' + err.message, true);
+      }
+    }
+
+    window.addEventListener('load', () => {
+      setDefaultDates();
+      loadReviewData();
+    });
+  </script>
+</body>
+</html>
