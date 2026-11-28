@@ -1,0 +1,876 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>給与計算（勤怠連動）</title>
+  <style>
+    :root {
+      --bg: #0f172a;
+      --surface: #1e293b;
+      --surface-2: #0b1120;
+      --text: #f8fafc;
+      --muted: #94a3b8;
+      --accent: #38bdf8;
+      --accent-2: #818cf8;
+      --danger: #ef4444;
+      --warning: #f59e0b;
+      --success: #22c55e;
+      --border: #334155;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Hiragino Kaku Gothic ProN", sans-serif;
+      padding: 16px;
+      min-height: 100vh;
+    }
+    .container {
+      max-width: 1280px;
+      margin: 0 auto;
+    }
+    header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 12px;
+      padding-bottom: 14px;
+      border-bottom: 1px solid var(--border);
+      margin-bottom: 16px;
+    }
+    h1 {
+      font-size: 1.35rem;
+      font-weight: 700;
+    }
+    .sub-caption {
+      color: var(--muted);
+      font-size: 0.82rem;
+      margin-top: 2px;
+    }
+    .nav-actions {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      align-items: center;
+    }
+    .btn {
+      background: var(--surface);
+      color: var(--text);
+      border: 1px solid #475569;
+      padding: 8px 12px;
+      border-radius: 8px;
+      font-size: 0.84rem;
+      font-weight: 600;
+      text-decoration: none;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+    .btn:hover { border-color: var(--accent); }
+    .btn-primary {
+      background: var(--accent);
+      color: #062033;
+      border-color: var(--accent);
+    }
+    .btn-sm {
+      padding: 5px 9px;
+      font-size: 0.78rem;
+      border-radius: 6px;
+    }
+    .panel {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 14px;
+      margin-bottom: 14px;
+    }
+    .controls-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-end;
+      flex-wrap: wrap;
+      gap: 12px;
+    }
+    .control-group {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+      align-items: flex-end;
+    }
+    .field-box {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+    label {
+      font-size: 0.76rem;
+      color: var(--muted);
+      font-weight: 600;
+    }
+    input, select {
+      background: var(--surface-2);
+      color: var(--text);
+      border: 1px solid #475569;
+      border-radius: 7px;
+      padding: 7px 10px;
+      font-size: 0.86rem;
+      font-family: inherit;
+    }
+    input:focus, select:focus {
+      outline: none;
+      border-color: var(--accent);
+    }
+    .rule-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+      gap: 10px;
+      margin-top: 12px;
+      padding-top: 12px;
+      border-top: 1px solid #293548;
+    }
+    .kpi-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+      gap: 10px;
+      margin-bottom: 14px;
+    }
+    .kpi-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 12px 14px;
+    }
+    .kpi-label {
+      font-size: 0.76rem;
+      color: var(--muted);
+      margin-bottom: 4px;
+    }
+    .kpi-value {
+      font-size: 1.25rem;
+      font-weight: 700;
+      font-variant-numeric: tabular-nums;
+    }
+    .kpi-value.accent { color: var(--accent); }
+    .kpi-value.success { color: #86efac; }
+    .kpi-value.warning { color: #fcd34d; }
+    .table-wrap {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      overflow-x: auto;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.84rem;
+    }
+    th, td {
+      padding: 9px 10px;
+      text-align: left;
+      border-bottom: 1px solid #293548;
+      vertical-align: middle;
+      white-space: nowrap;
+    }
+    th {
+      background: rgba(15, 23, 42, 0.78);
+      color: var(--muted);
+      font-size: 0.75rem;
+      font-weight: 700;
+    }
+    td.num, th.num {
+      text-align: right;
+      font-variant-numeric: tabular-nums;
+    }
+    tr:last-child td { border-bottom: none; }
+    .badge {
+      display: inline-block;
+      padding: 2px 7px;
+      border-radius: 999px;
+      font-size: 0.72rem;
+      font-weight: 700;
+    }
+    .badge-ok {
+      background: rgba(34, 197, 94, 0.16);
+      color: #86efac;
+    }
+    .badge-warn {
+      background: rgba(245, 158, 11, 0.18);
+      color: #fcd34d;
+    }
+    .empty-cell {
+      text-align: center;
+      color: var(--muted);
+      padding: 28px 12px;
+    }
+    .toast {
+      position: fixed;
+      right: 16px;
+      bottom: 16px;
+      background: var(--surface);
+      border: 1px solid var(--accent);
+      color: var(--text);
+      padding: 10px 14px;
+      border-radius: 8px;
+      font-size: 0.85rem;
+      box-shadow: 0 10px 25px rgba(0, 0, 0, 0.45);
+      display: none;
+      z-index: 200;
+    }
+    .toast.show { display: block; }
+    .toast.error { border-color: var(--danger); color: #fecaca; }
+
+    /* 個別給与設定モーダル */
+    .modal-backdrop {
+      position: fixed;
+      inset: 0;
+      background: rgba(2, 6, 23, 0.78);
+      display: none;
+      justify-content: center;
+      align-items: center;
+      padding: 16px;
+      z-index: 150;
+    }
+    .modal-backdrop.show { display: flex; }
+    .modal {
+      width: 100%;
+      max-width: 620px;
+      background: var(--surface);
+      border: 1px solid #475569;
+      border-radius: 12px;
+      padding: 18px;
+      max-height: 92vh;
+      overflow-y: auto;
+    }
+    .modal-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 14px;
+      padding-bottom: 10px;
+      border-bottom: 1px solid var(--border);
+    }
+    .modal-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+    }
+    .breakdown-box {
+      margin-top: 14px;
+      background: var(--surface-2);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 12px;
+      font-size: 0.84rem;
+    }
+    .breakdown-row {
+      display: flex;
+      justify-content: space-between;
+      padding: 4px 0;
+    }
+    .breakdown-row.total {
+      border-top: 1px solid var(--border);
+      margin-top: 6px;
+      padding-top: 8px;
+      font-weight: 700;
+      font-size: 0.95rem;
+      color: var(--accent);
+    }
+    .modal-footer {
+      display: flex;
+      justify-content: flex-end;
+      gap: 8px;
+      margin-top: 16px;
+      padding-top: 12px;
+      border-top: 1px solid var(--border);
+    }
+    @media print {
+      body { background: #fff; color: #000; padding: 0; }
+      .nav-actions, .controls-row .btn, .row-actions, .toast, .modal-backdrop { display: none !important; }
+      .panel, .kpi-card, .table-wrap { background: #fff; border-color: #cbd5e1; color: #000; }
+      th { background: #f1f5f9; color: #0f172a; }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <div>
+        <h1>給与計算（勤怠データ連動）</h1>
+        <div class="sub-caption">労働基準法ベースの割増賃金（時間外・深夜・休日）と手当・控除を反映して給与を算定します</div>
+      </div>
+      <div class="nav-actions">
+        <a href="./employees.html" class="btn">従業員マスタ管理</a>
+        <a href="./index.html" class="btn">打刻画面へ</a>
+        <button class="btn" onclick="exportCsv()">CSV出力</button>
+        <button class="btn" onclick="window.print()">印刷</button>
+      </div>
+    </header>
+
+    <div class="panel">
+      <div class="controls-row">
+        <div class="control-group">
+          <div class="field-box">
+            <label for="start-date">集計開始日</label>
+            <input id="start-date" type="date">
+          </div>
+          <div class="field-box">
+            <label for="end-date">集計終了日</label>
+            <input id="end-date" type="date">
+          </div>
+          <div class="field-box">
+            <label for="dept-filter">部署絞り込み</label>
+            <select id="dept-filter" onchange="renderPayrollTable()">
+              <option value="ALL">すべての部署</option>
+            </select>
+          </div>
+          <div class="field-box">
+            <label for="search-input">氏名・ID検索</label>
+            <input id="search-input" type="text" placeholder="例: 山田 / N1l2V1xx" oninput="renderPayrollTable()">
+          </div>
+        </div>
+        <div class="control-group">
+          <button class="btn btn-primary" onclick="fetchPayrollData()">勤怠データから集計</button>
+        </div>
+      </div>
+
+      <div class="rule-grid">
+        <div class="field-box">
+          <label for="rule-std-hours">月所定労働時間(h)</label>
+          <input id="rule-std-hours" type="number" step="0.5" min="1" onchange="saveRulesAndRecalc()">
+        </div>
+        <div class="field-box">
+          <label for="rule-ot-rate">時間外割増率（60h以下）</label>
+          <input id="rule-ot-rate" type="number" step="0.05" min="1" onchange="saveRulesAndRecalc()">
+        </div>
+        <div class="field-box">
+          <label for="rule-ot60-rate">時間外割増率（60h超）</label>
+          <input id="rule-ot60-rate" type="number" step="0.05" min="1" onchange="saveRulesAndRecalc()">
+        </div>
+        <div class="field-box">
+          <label for="rule-night-rate">深夜割増率（22-5時）</label>
+          <input id="rule-night-rate" type="number" step="0.05" min="0" onchange="saveRulesAndRecalc()">
+        </div>
+        <div class="field-box">
+          <label for="rule-holiday-rate">休日労働割増率</label>
+          <input id="rule-holiday-rate" type="number" step="0.05" min="1" onchange="saveRulesAndRecalc()">
+        </div>
+        <div class="field-box">
+          <label for="rule-absence-deduct">遅刻・早退控除</label>
+          <select id="rule-absence-deduct" onchange="saveRulesAndRecalc()">
+            <option value="true">控除する（実働基準）</option>
+            <option value="false">控除しない</option>
+          </select>
+        </div>
+      </div>
+    </div>
+
+    <div class="kpi-grid">
+      <div class="kpi-card">
+        <div class="kpi-label">対象人数</div>
+        <div id="kpi-count" class="kpi-value">0名</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-label">総支給額 合計</div>
+        <div id="kpi-gross" class="kpi-value accent">¥0</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-label">控除額 合計</div>
+        <div id="kpi-deduction" class="kpi-value warning">¥0</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-label">差引支給額（手取り目安）合計</div>
+        <div id="kpi-net" class="kpi-value success">¥0</div>
+      </div>
+    </div>
+
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>従業員ID</th>
+            <th>氏名 / 部署</th>
+            <th>区分</th>
+            <th class="num">出勤日数</th>
+            <th class="num">実働時間</th>
+            <th class="num">残業時間</th>
+            <th class="num">深夜時間</th>
+            <th class="num">基本給</th>
+            <th class="num">割増・手当</th>
+            <th class="num">総支給額</th>
+            <th class="num">控除合計</th>
+            <th class="num">差引支給額</th>
+            <th>勤怠確認</th>
+            <th>操作</th>
+          </tr>
+        </thead>
+        <tbody id="payroll-tbody">
+          <tr><td colspan="14" class="empty-cell">期間を指定して「勤怠データから集計」を押してください。</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- 個別給与設定・明細モーダル -->
+  <div id="pay-modal" class="modal-backdrop">
+    <div class="modal">
+      <div class="modal-header">
+        <div id="m-title" style="font-weight:700; font-size:1.02rem;">給与設定・明細</div>
+        <button class="btn btn-sm" onclick="closeModal()">閉じる</button>
+      </div>
+
+      <div class="modal-grid">
+        <div class="field-box">
+          <label for="m-pay-type">給与形態</label>
+          <select id="m-pay-type" onchange="updateModalPreview()">
+            <option value="monthly">月給制</option>
+            <option value="hourly">時給制</option>
+          </select>
+        </div>
+        <div class="field-box">
+          <label id="m-base-label" for="m-base-amount">基本給（月額・円）</label>
+          <input id="m-base-amount" type="number" step="100" min="0" oninput="updateModalPreview()">
+        </div>
+        <div class="field-box">
+          <label for="m-commute">通勤手当（円）</label>
+          <input id="m-commute" type="number" step="100" min="0" oninput="updateModalPreview()">
+        </div>
+        <div class="field-box">
+          <label for="m-other-allow">その他手当（役職・資格など・円）</label>
+          <input id="m-other-allow" type="number" step="100" min="0" oninput="updateModalPreview()">
+        </div>
+        <div class="field-box">
+          <label for="m-social-ins">社会保険料（健保・年金・雇用・円）</label>
+          <input id="m-social-ins" type="number" step="10" min="0" oninput="updateModalPreview()">
+        </div>
+        <div class="field-box">
+          <label for="m-tax">所得税・住民税等 控除（円）</label>
+          <input id="m-tax" type="number" step="10" min="0" oninput="updateModalPreview()">
+        </div>
+      </div>
+
+      <div id="m-breakdown" class="breakdown-box"></div>
+
+      <div class="modal-footer">
+        <button class="btn" onclick="closeModal()">キャンセル</button>
+        <button class="btn btn-primary" onclick="saveEmployeePayConfig()">設定を保存</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="toast" class="toast"></div>
+
+  <script>
+    const GAS_WEBAPP_URL = 'https://script.google.com/macros/s/AKfycbxXYd9al_H105tYO7RMG78hMoN27SQbEOaGy6vdst5IAUS0dhsHlx-3YdVPlMUIwGFy/exec';
+    const RULES_STORAGE_KEY = 'PAYROLL_RULES_V1';
+    const EMP_PAY_STORAGE_KEY = 'PAYROLL_EMP_CONFIGS_V1';
+
+    const DEFAULT_RULES = {
+      stdHours: 160,
+      otRate: 1.25,
+      ot60Rate: 1.5,
+      nightRate: 0.25,
+      holidayRate: 1.35,
+      deductAbsence: true
+    };
+
+    const DEFAULT_EMP_PAY = {
+      payType: 'monthly',
+      baseAmount: 250000,
+      commute: 10000,
+      otherAllow: 0,
+      socialIns: 37500,
+      tax: 12000
+    };
+
+    let rules = loadRules();
+    let empConfigs = loadEmpConfigs();
+    let rawEmployees = [];
+    let calculatedRows = [];
+    let activeEditEmpId = null;
+
+    function showToast(msg, isError = false) {
+      const el = document.getElementById('toast');
+      el.textContent = msg;
+      el.className = 'toast show' + (isError ? ' error' : '');
+      clearTimeout(showToast._timer);
+      showToast._timer = setTimeout(() => { el.className = 'toast'; }, 3200);
+    }
+
+    function escapeHtml(str) {
+      return String(str || '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
+    }
+
+    function formatYen(num) {
+      return '¥' + Math.round(Number(num) || 0).toLocaleString('ja-JP');
+    }
+
+    function formatMinutesToHm(mins) {
+      const m = Math.max(0, Math.round(Number(mins) || 0));
+      const h = Math.floor(m / 60);
+      const rem = m % 60;
+      return `${h}時間${String(rem).padStart(2, '0')}分`;
+    }
+
+    function loadRules() {
+      try {
+        const saved = JSON.parse(localStorage.getItem(RULES_STORAGE_KEY) || '{}');
+        return { ...DEFAULT_RULES, ...saved };
+      } catch (e) {
+        return { ...DEFAULT_RULES };
+      }
+    }
+
+    function loadEmpConfigs() {
+      try {
+        return JSON.parse(localStorage.getItem(EMP_PAY_STORAGE_KEY) || '{}');
+      } catch (e) {
+        return {};
+      }
+    }
+
+    function saveEmpConfigs() {
+      localStorage.setItem(EMP_PAY_STORAGE_KEY, JSON.stringify(empConfigs));
+    }
+
+    function applyRulesToInputs() {
+      document.getElementById('rule-std-hours').value = rules.stdHours;
+      document.getElementById('rule-ot-rate').value = rules.otRate;
+      document.getElementById('rule-ot60-rate').value = rules.ot60Rate;
+      document.getElementById('rule-night-rate').value = rules.nightRate;
+      document.getElementById('rule-holiday-rate').value = rules.holidayRate;
+      document.getElementById('rule-absence-deduct').value = String(Boolean(rules.deductAbsence));
+    }
+
+    function saveRulesAndRecalc() {
+      rules = {
+        stdHours: Math.max(1, Number(document.getElementById('rule-std-hours').value) || 160),
+        otRate: Math.max(1, Number(document.getElementById('rule-ot-rate').value) || 1.25),
+        ot60Rate: Math.max(1, Number(document.getElementById('rule-ot60-rate').value) || 1.5),
+        nightRate: Math.max(0, Number(document.getElementById('rule-night-rate').value) || 0.25),
+        holidayRate: Math.max(1, Number(document.getElementById('rule-holiday-rate').value) || 1.35),
+        deductAbsence: document.getElementById('rule-absence-deduct').value === 'true'
+      };
+      localStorage.setItem(RULES_STORAGE_KEY, JSON.stringify(rules));
+      recalcAll();
+    }
+
+    function setDefaultMonthRange() {
+      const now = new Date();
+      const y = now.getFullYear();
+      const m = now.getMonth();
+      const firstDay = new Date(y, m, 1);
+      const lastDay = new Date(y, m + 1, 0);
+
+      const fmt = d => {
+        const yyyy = d.getFullYear();
+        const mm = String(d.getMonth() + 1).padStart(2, '0');
+        const dd = String(d.getDate()).padStart(2, '0');
+        return `${yyyy}-${mm}-${dd}`;
+      };
+
+      document.getElementById('start-date').value = fmt(firstDay);
+      document.getElementById('end-date').value = fmt(lastDay);
+    }
+
+    async function postApi(payload) {
+      const res = await fetch(GAS_WEBAPP_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+        body: JSON.stringify(payload)
+      });
+      if (!res.ok) throw new Error('HTTPエラー: ' + res.status);
+      return await res.json();
+    }
+
+    async function fetchPayrollData() {
+      const startVal = document.getElementById('start-date').value;
+      const endVal = document.getElementById('end-date').value;
+      if (!startVal || !endVal) {
+        showToast('集計開始日と終了日を指定してください。', true);
+        return;
+      }
+
+      const tbody = document.getElementById('payroll-tbody');
+      tbody.innerHTML = '<tr><td colspan="14" class="empty-cell">勤怠データを集計しています...</td></tr>';
+
+      try {
+        const res = await postApi({
+          action: 'getPayrollCalculationData',
+          startDate: startVal.replace(/-/g, '/'),
+          endDate: endVal.replace(/-/g, '/')
+        });
+        if (!res.success) {
+          throw new Error(res.message || '集計に失敗しました');
+        }
+        rawEmployees = Array.isArray(res.employees) ? res.employees : [];
+        populateDeptFilter();
+        recalcAll();
+        showToast('勤怠データから給与を集計しました。');
+      } catch (err) {
+        tbody.innerHTML = `<tr><td colspan="14" class="empty-cell">集計エラー: ${escapeHtml(err.message)}</td></tr>`;
+        showToast('集計エラー: ' + err.message, true);
+      }
+    }
+
+    function populateDeptFilter() {
+      const sel = document.getElementById('dept-filter');
+      const current = sel.value;
+      const depts = new Set();
+      rawEmployees.forEach(e => {
+        if (e.dept) depts.add(e.dept);
+      });
+      sel.innerHTML = '<option value="ALL">すべての部署</option>' +
+        Array.from(depts).map(d => `<option value="${escapeHtml(d)}">${escapeHtml(d)}</option>`).join('');
+      if (Array.from(depts).includes(current)) {
+        sel.value = current;
+      }
+    }
+
+    function computeEmployeeSalary(emp, cfg) {
+      const payType = cfg.payType || (emp.empType && /パート|アルバイト|時給/.test(emp.empType) ? 'hourly' : 'monthly');
+      const baseAmount = Number(cfg.baseAmount) || 0;
+      const commute = Number(cfg.commute) || 0;
+      const otherAllow = Number(cfg.otherAllow) || 0;
+      const socialIns = Number(cfg.socialIns) || 0;
+      const tax = Number(cfg.tax) || 0;
+
+      const totalWorkMins = Number(emp.totalWorkMinutes) || 0;
+      const otMins = Number(emp.overtimeMinutes) || 0;
+      const holidayMins = Number(emp.holidayWorkMinutes) || 0;
+      const nightMins = Number(emp.nightWorkMinutes) || 0;
+
+      const stdMins = (Number(rules.stdHours) || 160) * 60;
+      const hourlyBase = (payType === 'hourly')
+        ? baseAmount
+        : (baseAmount / Math.max(1, stdMins / 60));
+
+      let basePay = 0;
+      let absenceDeduct = 0;
+
+      if (payType === 'hourly') {
+        const billableMins = Math.max(0, totalWorkMins - otMins - holidayMins);
+        basePay = Math.round(hourlyBase * (billableMins / 60));
+      } else {
+        basePay = Math.round(baseAmount);
+        if (rules.deductAbsence && totalWorkMins > 0 && totalWorkMins < stdMins) {
+          const shortfallMins = stdMins - totalWorkMins;
+          absenceDeduct = Math.round(hourlyBase * (shortfallMins / 60));
+        }
+      }
+
+      const ot60Mins = Math.max(0, otMins - 3600); // 月60時間（3600分）超過分
+      const otNormalMins = Math.max(0, otMins - ot60Mins);
+
+      const otPay = Math.round(
+        hourlyBase * (otNormalMins / 60) * rules.otRate +
+        hourlyBase * (ot60Mins / 60) * rules.ot60Rate
+      );
+      const holidayPay = Math.round(hourlyBase * (holidayMins / 60) * rules.holidayRate);
+      const nightPay = Math.round(hourlyBase * (nightMins / 60) * rules.nightRate);
+
+      const premiumAndAllow = otPay + holidayPay + nightPay + commute + otherAllow;
+      const grossPay = Math.max(0, basePay - absenceDeduct + premiumAndAllow);
+      const totalDeduction = socialIns + tax;
+      const netPay = grossPay - totalDeduction;
+
+      return {
+        payType,
+        baseAmount,
+        commute,
+        otherAllow,
+        socialIns,
+        tax,
+        hourlyBase,
+        basePay,
+        absenceDeduct,
+        otPay,
+        holidayPay,
+        nightPay,
+        premiumAndAllow,
+        grossPay,
+        totalDeduction,
+        netPay
+      };
+    }
+
+    function recalcAll() {
+      calculatedRows = rawEmployees.map(emp => {
+        const cfg = { ...DEFAULT_EMP_PAY, ...(empConfigs[emp.id] || {}) };
+        const calc = computeEmployeeSalary(emp, cfg);
+        return { emp, cfg, calc };
+      });
+      renderPayrollTable();
+    }
+
+    function renderPayrollTable() {
+      const deptVal = document.getElementById('dept-filter').value;
+      const q = document.getElementById('search-input').value.trim().toLowerCase();
+      const tbody = document.getElementById('payroll-tbody');
+
+      const visible = calculatedRows.filter(({ emp }) => {
+        if (deptVal !== 'ALL' && emp.dept !== deptVal) return false;
+        if (!q) return true;
+        return `${emp.id} ${emp.name} ${emp.kana} ${emp.dept}`.toLowerCase().includes(q);
+      });
+
+      const totalGross = visible.reduce((sum, r) => sum + r.calc.grossPay, 0);
+      const totalDed = visible.reduce((sum, r) => sum + r.calc.totalDeduction, 0);
+      const totalNet = visible.reduce((sum, r) => sum + r.calc.netPay, 0);
+
+      document.getElementById('kpi-count').textContent = `${visible.length}名`;
+      document.getElementById('kpi-gross').textContent = formatYen(totalGross);
+      document.getElementById('kpi-deduction').textContent = formatYen(totalDed);
+      document.getElementById('kpi-net').textContent = formatYen(totalNet);
+
+      if (visible.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="14" class="empty-cell">該当する従業員データがありません。</td></tr>';
+        return;
+      }
+
+      tbody.innerHTML = visible.map(({ emp, calc }) => {
+        const hasIssue = (emp.unapprovedCount > 0 || emp.incompleteCount > 0);
+        const statusHtml = hasIssue
+          ? `<span class="badge badge-warn">要確認（未承認${emp.unapprovedCount} / 未完${emp.incompleteCount}）</span>`
+          : `<span class="badge badge-ok">OK</span>`;
+
+        return `
+          <tr>
+            <td><code>${escapeHtml(emp.id)}</code></td>
+            <td><strong>${escapeHtml(emp.name)}</strong><div style="font-size:0.74rem;color:var(--muted);">${escapeHtml(emp.dept)}</div></td>
+            <td>${escapeHtml(emp.empType || '-')}</td>
+            <td class="num">${emp.workDays}日</td>
+            <td class="num">${formatMinutesToHm(emp.totalWorkMinutes)}</td>
+            <td class="num">${formatMinutesToHm(emp.overtimeMinutes)}</td>
+            <td class="num">${formatMinutesToHm(emp.nightWorkMinutes)}</td>
+            <td class="num">${formatYen(calc.basePay)}</td>
+            <td class="num">${formatYen(calc.premiumAndAllow)}</td>
+            <td class="num"><strong>${formatYen(calc.grossPay)}</strong></td>
+            <td class="num">${formatYen(calc.totalDeduction)}</td>
+            <td class="num"><strong style="color:#86efac;">${formatYen(calc.netPay)}</strong></td>
+            <td>${statusHtml}</td>
+            <td class="row-actions">
+              <button class="btn btn-sm" onclick="openPayModal('${escapeHtml(emp.id)}')">設定・明細</button>
+            </td>
+          </tr>
+        `;
+      }).join('');
+    }
+
+    function openPayModal(empId) {
+      const target = calculatedRows.find(r => r.emp.id === empId);
+      if (!target) return;
+      activeEditEmpId = empId;
+
+      document.getElementById('m-title').textContent = `${target.emp.name}（${target.emp.id}）の給与設定・明細`;
+      document.getElementById('m-pay-type').value = target.cfg.payType || 'monthly';
+      document.getElementById('m-base-amount').value = target.cfg.baseAmount ?? 250000;
+      document.getElementById('m-commute').value = target.cfg.commute ?? 10000;
+      document.getElementById('m-other-allow').value = target.cfg.otherAllow ?? 0;
+      document.getElementById('m-social-ins').value = target.cfg.socialIns ?? 37500;
+      document.getElementById('m-tax').value = target.cfg.tax ?? 12000;
+
+      updateModalPreview();
+      document.getElementById('pay-modal').classList.add('show');
+    }
+
+    function closeModal() {
+      activeEditEmpId = null;
+      document.getElementById('pay-modal').classList.remove('show');
+    }
+
+    function updateModalPreview() {
+      const target = calculatedRows.find(r => r.emp.id === activeEditEmpId);
+      if (!target) return;
+
+      const payType = document.getElementById('m-pay-type').value;
+      document.getElementById('m-base-label').textContent =
+        payType === 'hourly' ? '基本時給（円/時間）' : '基本給（月額・円）';
+
+      const draftCfg = {
+        payType,
+        baseAmount: Number(document.getElementById('m-base-amount').value) || 0,
+        commute: Number(document.getElementById('m-commute').value) || 0,
+        otherAllow: Number(document.getElementById('m-other-allow').value) || 0,
+        socialIns: Number(document.getElementById('m-social-ins').value) || 0,
+        tax: Number(document.getElementById('m-tax').value) || 0
+      };
+
+      const c = computeEmployeeSalary(target.emp, draftCfg);
+      document.getElementById('m-breakdown').innerHTML = `
+        <div class="breakdown-row"><span>基礎時給換算</span><span>${formatYen(c.hourlyBase)}/h</span></div>
+        <div class="breakdown-row"><span>基本給</span><span>${formatYen(c.basePay)}</span></div>
+        ${c.absenceDeduct > 0 ? `<div class="breakdown-row"><span>不足時間控除</span><span>-${formatYen(c.absenceDeduct)}</span></div>` : ''}
+        <div class="breakdown-row"><span>時間外割増手当</span><span>${formatYen(c.otPay)}</span></div>
+        <div class="breakdown-row"><span>深夜割増手当</span><span>${formatYen(c.nightPay)}</span></div>
+        <div class="breakdown-row"><span>休日労働割増手当</span><span>${formatYen(c.holidayPay)}</span></div>
+        <div class="breakdown-row"><span>通勤・その他手当</span><span>${formatYen(draftCfg.commute + draftCfg.otherAllow)}</span></div>
+        <div class="breakdown-row"><span><strong>総支給額</strong></span><span><strong>${formatYen(c.grossPay)}</strong></span></div>
+        <div class="breakdown-row"><span>控除合計（社保・税金）</span><span>-${formatYen(c.totalDeduction)}</span></div>
+        <div class="breakdown-row total"><span>差引支給額（手取り目安）</span><span>${formatYen(c.netPay)}</span></div>
+      `;
+    }
+
+    function saveEmployeePayConfig() {
+      if (!activeEditEmpId) return;
+      empConfigs[activeEditEmpId] = {
+        payType: document.getElementById('m-pay-type').value,
+        baseAmount: Number(document.getElementById('m-base-amount').value) || 0,
+        commute: Number(document.getElementById('m-commute').value) || 0,
+        otherAllow: Number(document.getElementById('m-other-allow').value) || 0,
+        socialIns: Number(document.getElementById('m-social-ins').value) || 0,
+        tax: Number(document.getElementById('m-tax').value) || 0
+      };
+      saveEmpConfigs();
+      recalcAll();
+      closeModal();
+      showToast('給与設定を保存しました。');
+    }
+
+    function exportCsv() {
+      if (calculatedRows.length === 0) {
+        showToast('出力する給与データがありません。', true);
+        return;
+      }
+      const headers = [
+        '従業員ID', '氏名', '部署', '出勤日数', '実働分', '残業分', '深夜分',
+        '基本給', '時間外手当', '深夜手当', '休日手当', '通勤手当', 'その他手当',
+        '総支給額', '控除合計', '差引支給額'
+      ];
+      const lines = [headers.join(',')];
+      calculatedRows.forEach(({ emp, calc }) => {
+        const row = [
+          emp.id, emp.name, emp.dept, emp.workDays,
+          emp.totalWorkMinutes, emp.overtimeMinutes, emp.nightWorkMinutes,
+          calc.basePay, calc.otPay, calc.nightPay, calc.holidayPay,
+          calc.commute, calc.otherAllow, calc.grossPay,
+          calc.totalDeduction, calc.netPay
+        ].map(v => `"${String(v ?? '').replace(/"/g, '""')}"`);
+        lines.push(row.join(','));
+      });
+
+      const bom = '\uFEFF';
+      const blob = new Blob([bom + lines.join('\n')], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      const startStr = document.getElementById('start-date').value || 'start';
+      const endStr = document.getElementById('end-date').value || 'end';
+      a.href = url;
+      a.download = `給与計算_${startStr}_${endStr}.csv`;
+      a.click();
+      URL.revokeObjectURL(url);
+      showToast('CSVファイルをダウンロードしました。');
+    }
+
+    window.addEventListener('load', () => {
+      setDefaultMonthRange();
+      applyRulesToInputs();
+      fetchPayrollData();
+    });
+  </script>
+</body>
+</html>
